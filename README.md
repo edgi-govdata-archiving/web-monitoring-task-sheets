@@ -1,6 +1,6 @@
 # Web Monitoring Task Sheets
 
-**⚠️ This is a work in progress, and is pretty messy! There will lots of commits directly on `master` for now. ⚠️**
+**⚠️ This is a work in progress, and is pretty messy! There will be lots of commits directly on `master` for now. ⚠️**
 
 This project is a re-envisioning of our process for generating weekly analyst tasking spreadsheets. It pulls down information from a web-monitoring-db instance about all the changes that have occurred over a given timeframe and then attempts to analyze them and assign a meaningful priority to each page.
 
