@@ -372,7 +372,7 @@ def setup_worker():
     handler.__enter__()
 
 
-def analyze_pages(pages, after, before, parallel=10, cancel=None):
+def analyze_pages(pages, after, before, parallel=None, cancel=None):
     """
     Analyze a set of pages in parallel across multiple processes. Yields tuples
     for each page with:
@@ -382,8 +382,9 @@ def analyze_pages(pages, after, before, parallel=10, cancel=None):
        an instance of `AnalyzableError` if the page or versions were not of a
        type that this module can actually analyze.
     """
+    parallel = parallel or multiprocessing.cpu_count()
     context = multiprocessing.get_context('fork')
-    with context.Pool(parallel, setup_worker, maxtasksperchild=50) as pool:
+    with context.Pool(parallel, setup_worker, maxtasksperchild=25) as pool:
         if cancel:
             close_on_event(pool, cancel)
 
