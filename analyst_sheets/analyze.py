@@ -383,8 +383,12 @@ def analyze_pages(pages, after, before, parallel=None, cancel=None):
        type that this module can actually analyze.
     """
     parallel = parallel or multiprocessing.cpu_count()
-    context = multiprocessing.get_context('fork')
-    with context.Pool(parallel, setup_worker, maxtasksperchild=25) as pool:
+    # Python 3.8 does sets start method by platform like this by default. This
+    # is just backporting that behavior. (Fork seems to occasionally cause real
+    # issues with threading on MacOS.)
+    method = sys.platform == 'darwin' and 'spawn' or 'fork'
+    context = multiprocessing.get_context(method)
+    with context.Pool(parallel, setup_worker, maxtasksperchild=100) as pool:
         if cancel:
             close_on_event(pool, cancel)
 
