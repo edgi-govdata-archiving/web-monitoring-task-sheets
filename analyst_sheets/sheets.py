@@ -20,7 +20,7 @@ HEADERS = [
     'Page Title',
     'URL',
     '---',
-    'Last Two - Side by Side',
+    'This Period - Side by Side',
     'Latest to Base - Side by Side',
     'Date Found - Latest',
     'Date Found - Base',
