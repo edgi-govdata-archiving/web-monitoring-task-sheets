@@ -22,7 +22,7 @@ import os.path
 import re
 import sys
 from urllib.parse import urlparse
-from web_monitoring import differs, links_diff
+from web_monitoring.diff import differs, links_diff
 
 import signal
 from web_monitoring.utils import Signal
