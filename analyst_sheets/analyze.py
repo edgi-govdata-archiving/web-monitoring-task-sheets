@@ -95,14 +95,10 @@ def is_allowed_extension(url):
 
 
 def is_analyzable_media(version):
-    # In the future, the data from DB will have media type info surfaced in a
-    # nice way, but it doesn't yet, so we need some logic. :(
-    media = (version['source_metadata'].get('content_type') or
-             version['source_metadata'].get('mime_type'))
-
+    media = version['media_type']
     if media:
-        media = media.split(';', 1)[0]
-        return media in ALLOWED_MEDIA or (media.startswith('text/') and media not in DISALLOWED_MEDIA)
+        return media in ALLOWED_MEDIA or (
+            media.startswith('text/') and media not in DISALLOWED_MEDIA)
     elif not REQUIRE_MEDIA_TYPE:
         return is_allowed_extension(version['capture_url'])
     else:
