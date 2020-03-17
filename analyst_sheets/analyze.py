@@ -245,6 +245,12 @@ def page_status_changed(page, a, b):
     return page_ok != first_ok
 
 
+# NOTE: this function is not currently used. For it to be reasonably effective,
+# we need a way to tell whether two HTML documents are *practically* the same,
+# not just exactly the same (via hash, which is what we have been doing). For
+# more on why using this without that capability is harmful rather than
+# helpful, see:
+# https://github.com/edgi-govdata-archiving/web-monitoring-task-sheets/issues/2
 def analyze_change_count(page, after, before):
     """
     Determine a factor for the number of changes that occurred during the time
@@ -304,9 +310,6 @@ def analyze_page(page, after, before):
     if status_changed:
         priority = 1
 
-    change_count_factor = analyze_change_count(page, after, before)
-    priority += 0.2 * change_count_factor
-
     link_analysis = analyze_links(a, b)
     priority += 0.1 + 0.3 * priority_factor(link_analysis['diff_ratio'])
     # This most likely indicates a page was removed from navigation! Big deal.
@@ -330,7 +333,6 @@ def analyze_page(page, after, before):
     return dict(
         priority=max(min(priority, 1), 0),
         versions=versions_count,
-        change_count_factor=change_count_factor,
         root_page=root_page,
         status=page['status'],
         status_changed=status_changed,
