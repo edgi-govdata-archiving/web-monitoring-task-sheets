@@ -9,6 +9,7 @@ from retry import retry
 import sys
 import threading
 import time
+from web_monitoring import db
 from web_monitoring.utils import FiniteQueue, Signal
 
 
@@ -228,7 +229,10 @@ def net_change(deletions, additions):
 
 @retry(tries=3, delay=1)
 def load_url(url, raise_status=True, timeout=5, **request_args):
-    response = requests.get(url, timeout=timeout, **request_args)
+    if url.startswith('https://api.monitoring.envirodatagov.org'):
+        response = db.Client.from_env().request('GET', url, **request_args)
+    else:
+        response = requests.get(url, timeout=timeout, **request_args)
     if raise_status and not response.ok:
         print(f'Raising on {url}')
         response.raise_for_status()
