@@ -126,6 +126,8 @@ def tap(iterable, action):
 
 
 BOUNDARY = re.compile(r'[\r\n\s.;:!?,<>{}[\]\-–—\|\\/]+')
+URL_BOUNDARY = re.compile(r'[\r\n\s>]+')
+MAYBE_URL = re.compile(r'^https?://')
 IGNORABLE = re.compile('[\'‘’"“”]')
 STOPWORDS = set(map(lambda word: IGNORABLE.sub('', word),
                     stopwords.words('english')))
@@ -167,7 +169,11 @@ class CharacterToWordDiffs:
         remaining = text
         remaining = IGNORABLE.sub('', remaining)
         while True:
-            boundary = BOUNDARY.search(remaining)
+            boundary_type = BOUNDARY
+            if MAYBE_URL.match(self.buffer + remaining):
+                boundary_type = URL_BOUNDARY
+
+            boundary = boundary_type.search(remaining)
             if boundary is None:
                 break
 
