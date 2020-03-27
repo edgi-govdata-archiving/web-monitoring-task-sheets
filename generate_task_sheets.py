@@ -180,6 +180,8 @@ def main(pattern=None, after=None, before=None, output_path=None, verbose=False)
         progress = tqdm(results, desc='analyzing', unit=' pages', total=page_count)
         # Log any unexpected errors along the way.
         results = tap(progress, lambda result: log_error(tqdm, verbose, result))
+        # Don't output pages where there was no overall change.
+        results = (item for item in results if not isinstance(item[2], analyze.NoChangeError))
 
         # If we aren't writing to disk, just print the high-priority results.
         if not output_path:

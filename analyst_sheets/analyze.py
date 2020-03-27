@@ -109,15 +109,19 @@ class AnalyzableError(ValueError):
     ...
 
 
+class NoChangeError(AnalyzableError):
+    ...
+
+
 def assert_can_analyze(page):
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
 
     if a['uuid'] == b['uuid']:
-        raise AnalyzableError('Page has only one version')
+        raise NoChangeError('Page has only one version')
 
     if a['version_hash'] == b['version_hash']:
-        raise AnalyzableError('First and last versions were exactly the same')
+        raise NoChangeError('First and last versions were exactly the same')
 
     if not is_fetchable(a['uri']) or not is_fetchable(b['uri']):
         raise AnalyzableError('Raw response data for page is not retrievable')
