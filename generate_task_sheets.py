@@ -86,7 +86,7 @@ def add_versions_to_page(page, after, before):
 
     # If the latest version is an error but the page is not in an error state,
     # then the error was spurious and should not be part of the analysis.
-    if page['status'] < 400:
+    if page['status'] is None or page['status'] < 400:
         error_versions = []
         while versions and versions[0]['status'] >= 400:
             error_versions.append(versions.pop(0))
