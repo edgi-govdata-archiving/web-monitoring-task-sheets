@@ -249,6 +249,33 @@ def page_status_changed(page, a, b):
     return page_ok != first_ok
 
 
+def status_code_type(status):
+    if status is None or status < 400:
+        return None
+    elif status < 500:
+        return 'user'
+    else:
+        return 'server'
+
+
+def page_status_factor(page, a, b):
+    """
+    Get a priority factor based on the status codes seen over the timeframe.
+    The basic goal here is to deprioritize changes on error pages, since they
+    are unlikely to actually be meaningful. If the start and end versions were
+    both errors, deprioritize a bit, and if they were the same type of error
+    (e.g. both were 4xx errors), deprioritize a lot.
+    """
+    a_error = status_code_type(a['status'])
+    b_error = status_code_type(b['status'])
+    if a_error is None or b_error is None:
+        return 1
+    elif a_error == b_error:
+        return 0.2
+    else:
+        return 0.45
+
+
 # NOTE: this function is not currently used. For it to be reasonably effective,
 # we need a way to tell whether two HTML documents are *practically* the same,
 # not just exactly the same (via hash, which is what we have been doing). For
@@ -310,10 +337,6 @@ def analyze_page(page, after, before):
         a['response'], b['response'] = parallel((load_url, a['uri']),
                                                 (load_url, b['uri']))
 
-    status_changed = page_status_changed(page, a, b)
-    if status_changed:
-        priority = 1
-
     link_analysis = analyze_links(a, b)
     priority += 0.1 + 0.3 * priority_factor(link_analysis['diff_ratio'])
     # This most likely indicates a page was removed from navigation! Big deal.
@@ -329,6 +352,12 @@ def analyze_page(page, after, before):
         priority += 0.1 + 0.3 * priority_factor(text_analysis['percent_changed'])
     else:
         priority += 0.1 * priority_factor(source_analysis['diff_ratio'])
+
+    status_changed = page_status_changed(page, a, b)
+    if status_changed:
+        priority += 1
+    else:
+        priority *= page_status_factor(page, a, b)
 
     # Demote root pages, since they usually are just listings of other things.
     if root_page:
