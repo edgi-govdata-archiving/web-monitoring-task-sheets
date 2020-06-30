@@ -271,9 +271,9 @@ def page_status_factor(page, a, b):
     if a_error is None or b_error is None:
         return 1
     elif a_error == b_error:
-        return 0.2
+        return 0.15
     else:
-        return 0.45
+        return 0.4
 
 
 # NOTE: this function is not currently used. For it to be reasonably effective,
