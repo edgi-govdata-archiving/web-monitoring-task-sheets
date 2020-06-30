@@ -158,7 +158,7 @@ def pretty_print_analysis(page, analysis, output=None):
         print(message, file=sys.stderr)
 
 
-def main(pattern=None, after=None, before=None, output_path=None, verbose=False):
+def main(pattern=None, after=None, before=None, output_path=None, threshold=0, verbose=False):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
         if output_path:
@@ -182,6 +182,9 @@ def main(pattern=None, after=None, before=None, output_path=None, verbose=False)
         results = tap(progress, lambda result: log_error(tqdm, verbose, result))
         # Don't output pages where there was no overall change.
         results = (item for item in results if not isinstance(item[2], analyze.NoChangeError))
+        # Filter out results under the threshold
+        results = filter(lambda item: item[1] is None or item[1]['priority'] > threshold,
+                         results)
 
         # If we aren't writing to disk, just print the high-priority results.
         if not output_path:
@@ -226,6 +229,7 @@ if __name__ == '__main__':
     parser.add_argument('--pattern', help='Only analyze pages with URLs matching this pattern.')
     parser.add_argument('--after', type=timeframe_date, help='Only include versions after this date. May also be a number of hours before the current time.')
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
+    parser.add_argument('--threshold', type=float, default=0.15, help='Minimum priority value to include in output.')
     parser.add_argument('--verbose', action='store_true', help='Show detailed error messages')
     # Need the ability to actually start/stop the readability server if we want this option
     # parser.add_argument('--readability', action='store_true', help='Only analyze pages with URLs matching this pattern.')
@@ -247,4 +251,5 @@ if __name__ == '__main__':
          before=options.before,
          after=options.after,
          output_path=options.output,
+         threshold=options.threshold,
          verbose=options.verbose)
