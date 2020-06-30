@@ -4,6 +4,7 @@ Tools to analyze a page.
 
 import concurrent.futures
 import multiprocessing
+from .normalize import normalize_html
 import sys
 from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
                     load_url_readability, parallel, ActivityMonitor)
@@ -209,7 +210,9 @@ def analyze_text(page, a, b):
 
 
 def analyze_links(a, b):
-    diff = links_diff.links_diff_json(a['response'].text, b['response'].text)['diff']
+    # EXPERIMENT: use normalized HTML for analysis.
+    # diff = links_diff.links_diff_json(a['response'].text, b['response'].text)['diff']
+    diff = links_diff.links_diff_json(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     removed_self_link = any((item[1]['href'] == a['capture_url'] or item[1]['href'] == b['capture_url']
                              for item in diff
@@ -223,7 +226,9 @@ def analyze_links(a, b):
 
 
 def analyze_source(a, b):
-    diff = differs.html_source_diff(a['response'].text, b['response'].text)['diff']
+    # EXPERIMENT: use normalized HTML for analysis.
+    # diff = differs.html_source_diff(a['response'].text, b['response'].text)['diff']
+    diff = differs.html_source_diff(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     return dict(
         diff_hash=hash_changes(diff_changes),
@@ -337,6 +342,8 @@ def analyze_page(page, after, before):
     with ActivityMonitor(f'load raw content for {page["uuid"]}'):
         a['response'], b['response'] = parallel((load_url, a['uri']),
                                                 (load_url, b['uri']))
+    a['normalized'] = normalize_html(a['response'].text, a['capture_url'])
+    b['normalized'] = normalize_html(b['response'].text, b['capture_url'])
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
