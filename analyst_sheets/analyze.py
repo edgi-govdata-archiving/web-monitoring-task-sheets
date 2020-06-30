@@ -339,7 +339,8 @@ def analyze_page(page, after, before):
                                                 (load_url, b['uri']))
 
     link_analysis = analyze_links(a, b)
-    priority += 0.1 + 0.3 * priority_factor(link_analysis['diff_ratio'])
+    if link_analysis['diff_length'] > 0:
+        priority += 0.1 + 0.3 * priority_factor(link_analysis['diff_ratio'])
     # This most likely indicates a page was removed from navigation! Big deal.
     if link_analysis['removed_self_link']:
         priority += 0.75
