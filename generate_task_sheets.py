@@ -40,8 +40,8 @@ def list_page_versions(page_id, after, before, cancel=None, client=None):
         client = db.Client.from_env()
 
     common = dict(page_id=page_id,
-                  include_change_from_previous=True,
-                  include_change_from_earliest=True,
+                  # include_change_from_previous=True,
+                  # include_change_from_earliest=True,
                   sort=['capture_time:desc'])
 
     chunk = 1

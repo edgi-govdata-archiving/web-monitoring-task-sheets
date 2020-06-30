@@ -114,11 +114,12 @@ class NoChangeError(AnalyzableError):
 
 
 def assert_can_analyze(page):
-    a = page['versions'][len(page['versions']) - 1]
-    b = page['versions'][0]
-
-    if a['uuid'] == b['uuid']:
+    total_versions = len(page['versions'])
+    if total_versions < 2:
         raise NoChangeError('Page has only one version')
+
+    a = page['versions'][-1]
+    b = page['versions'][0]
 
     if a['version_hash'] == b['version_hash']:
         raise NoChangeError('First and last versions were exactly the same')
