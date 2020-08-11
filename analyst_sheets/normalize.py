@@ -47,13 +47,20 @@ def normalize_html(html, url):
 
 
 def normalize_url(url, base_url):
-    absolute = urljoin(base_url, url)
-    # Use SURT to do most normalization, but don't return in SURT format.
-    result = surt(absolute, reverse_ipaddr=False, surt=False, with_scheme=True)
+    try:
+        absolute = urljoin(base_url, url)
+        # Use SURT to do most normalization, but don't return in SURT format.
+        result = surt(absolute, reverse_ipaddr=False, surt=False,
+                      with_scheme=True)
+    except ValueError:
+        # If the source was malformed or otherwise an invalid URL, just return
+        # the original value for comparison.
+        # TODO: have some kind of verbose flag that causes us to log this?
+        return url
+
     # Use HTTPS for all web URLs. Don't translate other schemes (e.g. FTP).
     if result.startswith('http:'):
         result = f'https:{result[5:]}'
-
     return result
 
 
