@@ -23,7 +23,8 @@ import os.path
 import re
 import sys
 from urllib.parse import urlparse
-from web_monitoring.diff import differs, links_diff
+from web_monitoring_diff import (html_source_diff, html_text_diff,
+                                 links_diff_json)
 
 import signal
 from web_monitoring.utils import Signal
@@ -165,11 +166,11 @@ def analyze_text(page, a, b):
         readable = True
         text_a = response_a.text
         text_b = response_b.text
-        raw_diff = differs.html_source_diff(text_a, text_b)
+        raw_diff = html_source_diff(text_a, text_b)
     else:
         text_a = re.sub(r'[\s\r\n]+', ' ', a['response'].text)
         text_b = re.sub(r'[\s\r\n]+', ' ', b['response'].text)
-        raw_diff = differs.html_text_diff(text_a, text_b)
+        raw_diff = html_text_diff(text_a, text_b)
 
     diff = raw_diff['diff']
     diff_changes = [item for item in diff if item[0] != 0]
@@ -211,8 +212,8 @@ def analyze_text(page, a, b):
 
 def analyze_links(a, b):
     # EXPERIMENT: use normalized HTML for analysis.
-    # diff = links_diff.links_diff_json(a['response'].text, b['response'].text)['diff']
-    diff = links_diff.links_diff_json(a['normalized'], b['normalized'])['diff']
+    # diff = links_diff_json(a['response'].text, b['response'].text)['diff']
+    diff = links_diff_json(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     removed_self_link = any((item[1]['href'] == a['capture_url'] or item[1]['href'] == b['capture_url']
                              for item in diff
@@ -227,8 +228,8 @@ def analyze_links(a, b):
 
 def analyze_source(a, b):
     # EXPERIMENT: use normalized HTML for analysis.
-    # diff = differs.html_source_diff(a['response'].text, b['response'].text)['diff']
-    diff = differs.html_source_diff(a['normalized'], b['normalized'])['diff']
+    # diff = html_source_diff(a['response'].text, b['response'].text)['diff']
+    diff = html_source_diff(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     return dict(
         diff_hash=hash_changes(diff_changes),
