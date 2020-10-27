@@ -37,7 +37,7 @@ REQUIRE_MEDIA_TYPE = False
 # allowed and only text types need be explicitly disallowed.
 ALLOWED_MEDIA = frozenset((
     # HTML should be text/html, but these are also common.
-    'appliction/html',
+    'application/html',
     'application/xhtml',
     'application/xhtml+xml',
     'application/xml',
@@ -304,8 +304,9 @@ def analyze_change_count(page, after, before):
     # Minimum factor to return
     min_factor = -1
 
-    versions_count = len(page['versions'])
-    first = page['versions'][len(page['versions']) - 1]
+    # versions_count = len(page['versions'])
+    versions_count = page['versions_count']
+    first = page['versions'][-1]
     if first['capture_time'] < after:
         versions_count -= 1
 
@@ -396,8 +397,6 @@ def work_page(after, before, page):
             return (page, result, None)
     except Exception as error:
         # TODO: add option for more detailed logging
-        # import traceback
-        # traceback.print_exc()
         return (page, None, error)
 
 
