@@ -8,7 +8,7 @@ retry
 # and not supported in setup.py.
 html5-parser ~=0.4.9 --no-binary lxml
 lxml ~=4.5.2
-web-monitoring-diff ==0.1.0a2 --no-binary lxml
+web-monitoring-diff ==0.1.0 --no-binary lxml
 # These first two are actually dependencies of web-monitoring-processing, but
 # since setup.py doesn't support git URLs for packages, we need to explicitly
 # specify them for installing here.
