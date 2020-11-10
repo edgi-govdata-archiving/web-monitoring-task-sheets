@@ -127,6 +127,7 @@ def remove_session_id(url):
     query.pop('session_id', None)
     query.pop('SESSION', None)
     query.pop('session', None)
-    clean = f'{base}?{urlencode(query, doseq=True)}'
+    clean_querystring = urlencode(query, doseq=True)
+    clean = f'{base}?{clean_querystring}' if clean_querystring else base
 
     return clean
