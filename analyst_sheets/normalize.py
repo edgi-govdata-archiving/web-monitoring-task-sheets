@@ -3,8 +3,9 @@ Experimental tools for normalizing HTML source before analysis. We might move
 these lower down in the dependency stack later.
 """
 import html5_parser
+import re
 from surt import surt
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 
 def normalize_html(html, url):
@@ -61,6 +62,8 @@ def normalize_url(url, base_url):
     # Use HTTPS for all web URLs. Don't translate other schemes (e.g. FTP).
     if result.startswith('http:'):
         result = f'https:{result[5:]}'
+
+    result = remove_session_id(result)
     return result
 
 
@@ -86,3 +89,44 @@ def get_base_url(soup, url):
         return urljoin(url, base['href'].strip())
     else:
         return url
+
+
+SERVLET_SESSION_ID = re.compile(r';jsessionid=[a-zA-Z0-9\-_,]+')
+ASP_SESSION_ID = re.compile(r'/\(S\([a-zA-Z0-9\-_,]+\)\)/')
+
+
+def remove_session_id(url):
+    """
+    Remove session IDs from URLs when comparing. Some servers, like Java
+    Servlets, may store session IDs in the URL instead of cookies. We don't
+    want to count those for URL comparisons, since they will almost always be
+    different, even if the meaningful part of the URL is the same. For example,
+    these two URLs would be equivalent:
+    - https://www.ncdc.noaa.gov/homr/api;jsessionid=A2DECB66D2648BFED11FC721FC3043A1
+    - https://www.ncdc.noaa.gov/homr/api;jsessionid=B3EFDC88E3759CGFE22GD832GD4154B2
+
+    Because they both refer to `https://www.ncdc.noaa.gov/homr/api`.
+    """
+    # Java servlet and ASP.net session IDs can be anywhere in the URL.
+    clean = SERVLET_SESSION_ID.sub('', url, count=1)
+    clean = ASP_SESSION_ID.sub('/', clean, count=1)
+
+    # Most others we know of are in the querystring.
+    base, _, querystring = clean.partition('?')
+    try:
+        query = parse_qs(querystring, keep_blank_values=True)
+    except ValueError:
+        return clean
+    query.pop('PHPSESSID', None)
+    query.pop('phpsessid', None)
+    query.pop('SID', None)
+    query.pop('sid', None)
+    query.pop('SESSIONID', None)
+    query.pop('sessionid', None)
+    query.pop('SESSION_ID', None)
+    query.pop('session_id', None)
+    query.pop('SESSION', None)
+    query.pop('session', None)
+    clean = f'{base}?{urlencode(query, doseq=True)}'
+
+    return clean
