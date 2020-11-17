@@ -3,15 +3,10 @@ python-dateutil
 requests
 requests-cache
 retry
+web-monitoring-diff ==0.1.0 --no-binary lxml
+git+https://github.com/edgi-govdata-archiving/web-monitoring-processing@main
 # These are dependencies of web-monitoring-processing, but we need to install
 # them explicitly because of the --no-binary argument, which is specific to Pip
 # and not supported in setup.py.
 html5-parser ~=0.4.9 --no-binary lxml
 lxml ~=4.6.1
-web-monitoring-diff ==0.1.0 --no-binary lxml
-# These first two are actually dependencies of web-monitoring-processing, but
-# since setup.py doesn't support git URLs for packages, we need to explicitly
-# specify them for installing here.
-git+https://github.com/anastasia/htmldiffer@develop
-git+https://github.com/danielballan/htmltreediff@customize
-git+https://github.com/edgi-govdata-archiving/web-monitoring-processing@main
