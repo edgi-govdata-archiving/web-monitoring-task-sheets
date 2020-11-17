@@ -8,7 +8,7 @@ from surt import surt
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 
-def normalize_html(html, url):
+def normalize_html(html, url, remove_extra_content=True):
     """
     Remove parts of the HTML that we expect to change pointlessly and result in
     two pages that are effectively the same still appearing different, and thus
@@ -43,6 +43,10 @@ def normalize_html(html, url):
     # Hidden form fields for postbacks or other session info
     for node in soup.select('input[type="hidden"], input[name^="__"]'):
         node.extract()
+
+    # Attempt to drop news boxes, asides not related to content, etc.
+    if remove_extra_content:
+        remove_extraneous_nodes(soup, url)
 
     return soup.prettify()
 
@@ -131,3 +135,33 @@ def remove_session_id(url):
     clean = f'{base}?{clean_querystring}' if clean_querystring else base
 
     return clean
+
+
+def remove_extraneous_nodes(soup, url):
+    """
+    Attempt to find and remove content not primarily related to the page, like
+    news boxes, ads, etc.
+    """
+    # Social media share links
+    for node in soup.select('.follow-links, .social-links, [id*="social"], [id*="share"], [id*="sharing"], [class*="social"], [class*="share"], [class*="sharing"]'):
+        node.extract()
+
+    if not is_news_page(soup, url):
+        # Candidates that seem iffy, but may consider adding:
+        #   .latest-updates
+        for node in soup.select('.box.news, .panel.news, .pane.news, .panel-pane.news, .news-feed, .home-news-feed, [class*="pane-blog"]'):
+            node.extract()
+
+    for node in soup.select('.twitter-feed'):
+        node.extract()
+
+
+def is_news_page(soup, url):
+    terms = ('news', 'press', 'blog')
+    title = soup.title or ''
+    if any(term in title for term in terms):
+        return True
+    if any(f'/{term}' in url for term in terms):
+        return True
+
+    return False

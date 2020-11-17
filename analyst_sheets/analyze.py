@@ -168,8 +168,8 @@ def analyze_text(page, a, b):
         text_b = response_b.text
         raw_diff = html_source_diff(text_a, text_b)
     else:
-        text_a = re.sub(r'[\s\r\n]+', ' ', a['response'].text)
-        text_b = re.sub(r'[\s\r\n]+', ' ', b['response'].text)
+        text_a = re.sub(r'[\s\r\n]+', ' ', a['normalized'])
+        text_b = re.sub(r'[\s\r\n]+', ' ', b['normalized'])
         raw_diff = html_text_diff(text_a, text_b)
 
     diff = raw_diff['diff']
