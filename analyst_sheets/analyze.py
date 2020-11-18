@@ -324,13 +324,18 @@ def analyze_change_count(page, after, before):
     return factor
 
 
+ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
+
+
+def is_home_page(page):
+    url_path = urlparse(page['url']).path
+    return True if ROOT_PAGE_PATTERN.match(url_path) else False
+
+
 # Calculate a multiplier for priority based on a ratio representing the amount
 # of change. This is basically applying a logorithmic curve to the ratio.
 def priority_factor(ratio):
     return math.log(1 + (math.e - 1) * ratio)
-
-
-ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
 
 
 def analyze_page(page, after, before):
@@ -342,8 +347,7 @@ def analyze_page(page, after, before):
     priority = 0
 
     versions_count = len(page['versions'])
-    url_path = urlparse(page['url']).path
-    root_page = True if ROOT_PAGE_PATTERN.match(url_path) else False
+    root_page = is_home_page(page)
 
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
