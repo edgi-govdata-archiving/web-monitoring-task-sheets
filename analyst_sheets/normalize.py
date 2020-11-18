@@ -174,16 +174,106 @@ def remove_extraneous_nodes(soup, url):
     news boxes, ads, etc.
     """
     # Social media share links
-    for node in soup.select('.follow-links, .social-links, [id*="social"], [id*="share"], [id*="sharing"], [class*="social"], [class*="share"], [class*="sharing"]'):
-        node.extract()
+    remove_selectors(soup, (
+        '.follow-links',
+        '.social-links',
+        '[id*="social"]',
+        '[id*="share"]',
+        '[id*="sharing"]',
+        '[class*="social"]',
+        '[class*="share"]',
+        '[class*="sharing"]',
+    ))
 
     if not is_news_page(soup, url):
         # Candidates that seem iffy, but may consider adding:
-        #   .latest-updates
-        for node in soup.select('.box.news, .panel.news, .pane.news, .panel-pane.news, .news-feed, .home-news-feed, [class*="pane-blog"]'):
-            node.extract()
+        #   `.latest-updates`
+        news_feed_selectors = [
+            '.news-section',
+            '.news_content',
+            '.news-content',
+            '.box.news',
+            '.panel.news',
+            '.pane.news',
+            '.panel-pane.news',
+            '[class*="pane-news"]',
+            '[class*="pane_news"]',
+            '.news-feed',
+            '.home-news-feed',
+            '[class*="pane-blog"]',
+            '.whats-new',
+            '.press-room',
+            '#nav-news',
+            'nav .news',
+            # This might be too specific? Maybe [class*="news-teaser"] is
+            # better? Comes from:
+            # https://dph.georgia.gov/health-topics/coronavirus-covid-19
+            '.news-teaser-list',
+        ]
 
-    for node in soup.select('.twitter-feed'):
+        # NOT GENERALIZED. Specific to certain sites/pages.
+        # Some of these may be ripe for promotion to the more general selector
+        # above. Needs some thought.
+        news_feed_selectors.extend((
+            # nrcc.cornell.edu
+            # (ex: https://monitoring.envirodatagov.org/page/8d4dca19-e79e-467a-aa9a-5bb2df1a9eb3/ea61eb48-6816-4d1d-814e-100af9cf99f5..0311cad6-6427-422a-92e0-867c6c9fa5fc)
+            'nav .nrcc-webinar-content',
+            'nav [id*="blog-content"]',
+            'nav [class*="blog-content"]',
+            # doi.gov
+            # (ex: https://monitoring.envirodatagov.org/page/c0926b52-9361-42ba-b6f5-516a4068dedf/9ed6ef6d-caff-4b57-a4b7-1cd26bf42332..dada2ab9-64ae-4408-aee0-b1794b17e438)
+            # (Checking the container has "related-content" because I worry
+            # this is *slightly* too broad otherwise.)
+            '[class*="related-content"] [class*="press-release"]',
+        ))
+        remove_selectors(soup, news_feed_selectors)
+
+    # Twitter feeds.
+    remove_selectors(soup, (
+        '[class*="twitter-feed"]',
+        '[class*="twitter_feed"]',
+        '[class*="tweet-feed"]',
+        '[class*="tweet_feed"]',
+    ))
+
+    # Related/explore links, often at the bottom of pages.
+    # This is tricky, we don't want to remove "related" resource links that
+    # actually are part of/specific to the main content of the page.
+    remove_selectors(soup, (
+        # These are probably OK, but possible they could be too generic.
+        # From http://climate.nasa.gov/climate_resources/*
+        # ^ This specific case could be fixed by improving our readability
+        #   fallback, too.
+        '.carousel_teaser',
+        '.multimedia_teaser',
+    ))
+
+    # Ignore FontAwesome icons.
+    remove_selectors(soup, ('i.fa',))
+
+    # NOT GENERALIZED! These will all be very brittle, and we can't extend
+    # these to cover everything. Only add for items known to cause real pain.
+    # TODO: move these into a separate file so someone could swap in a
+    # different URL-based list of things to remove.
+    if 'defense.gov/' in url:
+        remove_selectors(soup, ('.dgov-carousel-explore',))
+    elif 'globalchange.gov/' in url:
+        remove_selectors(soup, ('aside [class*="related-reports"]',))
+    elif 'fema.gov/' in url:
+        remove_selectors(soup, ('[class*="blockfeed-on-disaster-pages"]',))
+
+    # TODO: https://scenarios.globalchange.gov/regions/* has a list of images
+    # that appears to be unordered or sorted on some criteria that changes
+    # frequently. Not sure if we really want to block out that content, though.
+    # e.g. https://monitoring.envirodatagov.org/page/7790790a-f46c-41fe-83da-bbe4bf850c9d/d1725a82-4cc7-4d9b-8ee6-673ab6facd54..fa2f99d7-cd70-4358-9044-4aabb82763e0
+
+    # TODO: search/listing result sets? e.g:
+    #   - `[class*="document-lister"]` on https://monitoring.envirodatagov.org/page/050d4127-aa89-4f4c-bf43-41bb3b5b66a9/71ca0829-afd3-4299-86bc-419e2a41e1f7..19f1ed78-e089-4930-923b-4b9d63d7aa61
+
+
+def remove_selectors(soup, selectors):
+    selector = ', '.join(selectors)
+    for node in soup.select(selector):
         node.extract()
 
 
