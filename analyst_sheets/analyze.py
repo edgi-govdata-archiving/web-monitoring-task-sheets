@@ -328,6 +328,9 @@ def priority_factor(ratio):
     return math.log(1 + (math.e - 1) * ratio)
 
 
+ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
+
+
 def analyze_page(page, after, before):
     """
     Analyze a page from web-monitoring-db and return information about how the
@@ -337,7 +340,8 @@ def analyze_page(page, after, before):
     priority = 0
 
     versions_count = len(page['versions'])
-    root_page = urlparse(page['url']).path == '/'
+    url_path = urlparse(page['url']).path
+    root_page = ROOT_PAGE_PATTERN.match(url_path)
 
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
