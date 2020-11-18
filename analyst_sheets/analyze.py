@@ -218,6 +218,8 @@ def analyze_links(a, b):
     removed_self_link = any((item[1]['href'] == a['capture_url'] or item[1]['href'] == b['capture_url']
                              for item in diff
                              if item[0] == -1))
+
+    # TODO: differentiate fragment vs. external links and treat differently?
     return dict(
         diff_hash=hash_changes(diff_changes),
         diff_length=len(diff_changes),
@@ -377,6 +379,13 @@ def analyze_page(page, after, before):
     # Demote root pages, since they usually are just listings of other things.
     if root_page:
         priority *= 0.25
+
+    # TODO: Demote topic pages?
+    # 1 (or 2?) level deep and not readable
+
+    # TODO: Demote news pages...?
+    # if is_news_page(page['url']):
+    #     priority *= 0.25
 
     return dict(
         priority=max(min(priority, 1), 0),
