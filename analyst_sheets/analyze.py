@@ -343,7 +343,7 @@ def analyze_page(page, after, before):
 
     versions_count = len(page['versions'])
     url_path = urlparse(page['url']).path
-    root_page = ROOT_PAGE_PATTERN.match(url_path)
+    root_page = True if ROOT_PAGE_PATTERN.match(url_path) else False
 
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
