@@ -85,6 +85,8 @@ def format_row(page, analysis, error, index, name, timestamp):
     ]
 
     if analysis:
+        key_terms = analysis['text']['key_terms']
+        key_terms_ratio = analysis["text"]["key_terms_change_ratio"]
         row.extend([
             analysis['source']['diff_length'],
             format_hash(analysis['source']['diff_hash']),
@@ -98,7 +100,8 @@ def format_row(page, analysis, error, index, name, timestamp):
             analysis['status_changed'],
             analysis['status'],
             analysis['text']['readable'],
-            ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
+            ', '.join((f'{term}: {count} ({key_terms_ratio[term] * 100:+.1f}%)'
+                       for term, count in key_terms.items())),
             format(analysis['text']['percent_changed'], '.3f'),
             format_hash(analysis['links']['diff_hash']),
             analysis['links']['diff_length'],

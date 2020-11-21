@@ -6,8 +6,8 @@ import concurrent.futures
 import multiprocessing
 from .normalize import normalize_html
 import sys
-from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
-                    load_url_readability, parallel, ActivityMonitor)
+from .tools import (CharacterToWordDiffs, load_url, load_url_readability,
+                    ngrams, parallel, ActivityMonitor)
 from .terms import KEY_TERMS, KEY_TERM_GRAMS
 from toolz.itertoolz import concat
 import threading
@@ -183,25 +183,42 @@ def analyze_text(page, a, b):
 
     # Count the terms that were added and removed.
     grams = KEY_TERM_GRAMS
-    terms = (Counter(), Counter(),)
+    terms = (Counter(), Counter(), Counter())
     for gram in range(1, grams + 1):
-        terms[0].update(Counter(changed_ngrams(word_diff[0], gram)))
-        terms[1].update(Counter(changed_ngrams(word_diff[1], gram)))
+        terms[0].update(ngrams(word_diff[0], gram, only_changes=True))
+        terms[1].update(ngrams(word_diff[1], gram, only_changes=True))
+        terms[2].update(ngrams(word_diff[0], gram))
 
     all_terms = Counter(terms[1])
     all_terms.subtract(terms[0])
-    key_terms = {term: all_terms[term]
-                 for term in KEY_TERMS
-                 if abs(all_terms.get(term, 0)) > 0}
-    key_terms_changed = len(key_terms) > 0
-    key_terms_change_count = sum((abs(count)
-                                  for term, count in key_terms.items()))
+    # key_terms = {term: all_terms[term]
+    #              for term in KEY_TERMS
+    #              if abs(all_terms.get(term, 0)) > 0}
+    # key_terms_changed = len(key_terms) > 0
+    # key_terms_change_count = sum((abs(count)
+    #                               for term, count in key_terms.items()))
+    # # key_terms_change_ratio = {term: key_terms[term] / total_count
+    # #                           for term, total_count in terms[2].items()
+    # #                           if term in KEY_TERMS and term in all_terms}
+    # key_terms_change_ratio = {term: key_terms[term] / max(terms[2][term], 0.1)
+    #                           for term in KEY_TERMS
+    #                           if term in key_terms}
+    key_terms = {}
+    key_terms_change_ratio = {}
+    key_terms_change_count = 0
+    for term in KEY_TERMS:
+        if abs(all_terms.get(term, 0)) > 0:
+            change = all_terms[term]
+            key_terms_change_count += abs(change)
+            key_terms[term] = change
+            key_terms_change_ratio[term] = change / max(terms[2][term], 0.1)
 
     return {
         'readable': readable,
         'key_terms': key_terms,
-        'key_terms_changed': key_terms_changed,
+        'key_terms_changed': key_terms_change_count > 0,
         'key_terms_change_count': key_terms_change_count,
+        'key_terms_change_ratio': key_terms_change_ratio,
         'percent_changed': calculate_percent_changed(raw_diff['diff']),
         # 'percent_changed_words': calculate_percent_changed(word_diff),
         'diff_hash': hash_changes(diff_changes),
@@ -366,7 +383,9 @@ def analyze_page(page, after, before):
 
     text_analysis = analyze_text(page, a, b)
     if text_analysis['key_terms_changed']:
-        priority += 0.4 + 0.1 * text_analysis['key_terms_change_count']
+        # priority += 0.4 + 0.1 * text_analysis['key_terms_change_count']
+        priority += 0.3 + sum(0.1 * min(ratio,  4)
+                              for term, ratio in text_analysis['key_terms_change_ratio'].items())
     if text_analysis['diff_count'] > 0:
         priority += 0.45 * priority_factor(text_analysis['percent_changed'])
 

@@ -203,7 +203,7 @@ class CharacterToWordDiffs:
         self.buffer = ''
 
 
-def changed_ngrams(diff, size=1):
+def ngrams(diff, size=1, only_changes=False):
     token_buffer = []
     change_buffer = []
     for item in diff:
@@ -214,7 +214,7 @@ def changed_ngrams(diff, size=1):
             token_buffer.append(item[1])
             change_buffer.append(item[0])
             if len(token_buffer) == size:
-                if any(change_buffer):
+                if not only_changes or any(change_buffer):
                     yield ' '.join(token_buffer)
                 token_buffer.pop(0)
                 change_buffer.pop(0)
