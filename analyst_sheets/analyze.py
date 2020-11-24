@@ -366,7 +366,7 @@ def analyze_page(page, after, before):
 
     text_analysis = analyze_text(page, a, b)
     if text_analysis['key_terms_changed']:
-        priority += 0.4 + 0.1 * text_analysis['key_terms_change_count']
+        priority += 0.1 * text_analysis['key_terms_change_count']
     if text_analysis['diff_count'] > 0:
         priority += 0.45 * priority_factor(text_analysis['percent_changed'])
 
