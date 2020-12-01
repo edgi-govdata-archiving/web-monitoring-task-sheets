@@ -62,8 +62,7 @@ def normalize_html(html, url, remove_extra_content=True):
             node.extract()
 
     # Hidden form fields for postbacks or other session info
-    for node in soup.select('input[type="hidden"], input[name^="__"]'):
-        node.extract()
+    remove_selectors(soup, ('input[type="hidden"]', 'input[name^="__"]'))
 
     # Attempt to drop news boxes, asides not related to content, etc.
     if remove_extra_content:
@@ -173,8 +172,8 @@ def remove_extraneous_nodes(soup, url):
     Attempt to find and remove content not primarily related to the page, like
     news boxes, ads, etc.
     """
-    # Social media share links
-    remove_selectors(soup, (
+    selectors = [
+        # Social media share links
         '.follow-links',
         '.social-links',
         '[id*="social"]',
@@ -183,12 +182,32 @@ def remove_extraneous_nodes(soup, url):
         '[class*="social"]',
         '[class*="share"]',
         '[class*="sharing"]',
-    ))
+
+        # Twitter feeds
+        '[class*="twitter-feed"]',
+        '[class*="twitter_feed"]',
+        '[class*="tweet-feed"]',
+        '[class*="tweet_feed"]',
+
+        # Related/explore links, often at the bottom of pages.
+        # This is tricky; we don't want to remove "related" resource links that
+        # actually are part of/specific to the main content of the page.
+        #
+        # These are probably OK, but possible they could be too generic.
+        # From http://climate.nasa.gov/climate_resources/*
+        # ^ This specific case could be fixed by improving our readability
+        #   fallback, too.
+        '.carousel_teaser',
+        '.multimedia_teaser',
+
+        # Ignore FontAwesome icons.
+        'i.fa',
+    ]
 
     if not is_news_page(soup, url):
-        # Candidates that seem iffy, but may consider adding:
-        #   `.latest-updates`
-        news_feed_selectors = [
+        selectors.extend((
+            # Candidates that seem iffy, but may consider adding:
+            #   `.latest-updates`
             '.news-section',
             '.news_content',
             '.news-content',
@@ -209,12 +228,11 @@ def remove_extraneous_nodes(soup, url):
             # better? Comes from:
             # https://dph.georgia.gov/health-topics/coronavirus-covid-19
             '.news-teaser-list',
-        ]
 
-        # NOT GENERALIZED. Specific to certain sites/pages.
-        # Some of these may be ripe for promotion to the more general selector
-        # above. Needs some thought.
-        news_feed_selectors.extend((
+            # NOT GENERALIZED. Specific to certain sites/pages.
+            # Some of these may be ripe for promotion to the more general selector
+            # above. Needs some thought.
+            #
             # nrcc.cornell.edu
             # (ex: https://monitoring.envirodatagov.org/page/8d4dca19-e79e-467a-aa9a-5bb2df1a9eb3/ea61eb48-6816-4d1d-814e-100af9cf99f5..0311cad6-6427-422a-92e0-867c6c9fa5fc)
             'nav .nrcc-webinar-content',
@@ -226,41 +244,17 @@ def remove_extraneous_nodes(soup, url):
             # this is *slightly* too broad otherwise.)
             '[class*="related-content"] [class*="press-release"]',
         ))
-        remove_selectors(soup, news_feed_selectors)
-
-    # Twitter feeds.
-    remove_selectors(soup, (
-        '[class*="twitter-feed"]',
-        '[class*="twitter_feed"]',
-        '[class*="tweet-feed"]',
-        '[class*="tweet_feed"]',
-    ))
-
-    # Related/explore links, often at the bottom of pages.
-    # This is tricky, we don't want to remove "related" resource links that
-    # actually are part of/specific to the main content of the page.
-    remove_selectors(soup, (
-        # These are probably OK, but possible they could be too generic.
-        # From http://climate.nasa.gov/climate_resources/*
-        # ^ This specific case could be fixed by improving our readability
-        #   fallback, too.
-        '.carousel_teaser',
-        '.multimedia_teaser',
-    ))
-
-    # Ignore FontAwesome icons.
-    remove_selectors(soup, ('i.fa',))
 
     # NOT GENERALIZED! These will all be very brittle, and we can't extend
     # these to cover everything. Only add for items known to cause real pain.
     # TODO: move these into a separate file so someone could swap in a
     # different URL-based list of things to remove.
     if 'defense.gov/' in url:
-        remove_selectors(soup, ('.dgov-carousel-explore',))
+        selectors.append('.dgov-carousel-explore')
     elif 'globalchange.gov/' in url:
-        remove_selectors(soup, ('aside [class*="related-reports"]',))
+        selectors.append('aside [class*="related-reports"]')
     elif 'fema.gov/' in url:
-        remove_selectors(soup, ('[class*="blockfeed-on-disaster-pages"]',))
+        selectors.append('[class*="blockfeed-on-disaster-pages"]')
 
     # TODO: https://scenarios.globalchange.gov/regions/* has a list of images
     # that appears to be unordered or sorted on some criteria that changes
@@ -269,6 +263,8 @@ def remove_extraneous_nodes(soup, url):
 
     # TODO: search/listing result sets? e.g:
     #   - `[class*="document-lister"]` on https://monitoring.envirodatagov.org/page/050d4127-aa89-4f4c-bf43-41bb3b5b66a9/71ca0829-afd3-4299-86bc-419e2a41e1f7..19f1ed78-e089-4930-923b-4b9d63d7aa61
+
+    remove_selectors(soup, selectors)
 
 
 def remove_selectors(soup, selectors):
