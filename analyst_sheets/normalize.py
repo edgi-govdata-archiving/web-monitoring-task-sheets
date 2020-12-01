@@ -2,10 +2,47 @@
 Experimental tools for normalizing HTML source before analysis. We might move
 these lower down in the dependency stack later.
 """
+from bs4 import NavigableString
+from bs4.formatter import EntitySubstitution, HTMLFormatter
 import html5_parser
 import re
 from surt import surt
-from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin
+
+
+INFIX_PUNCTUATION = re.compile(r'''['‘’]''')
+NON_WORDS = re.compile(r'\W+')
+
+
+def normalize_text(text):
+    """
+    Normalize a chunk of text from an HTML document by casefolding and removing
+    punctuation.
+    """
+    # Remove punctuation between words
+    return NON_WORDS.sub(
+        ' ',
+        # Remove punctuation that occurs inside words
+        INFIX_PUNCTUATION.sub(
+            '',
+            # Lower-case and normalize unicode characters
+            text.casefold()
+        )
+    )
+
+
+def normalize_soup_text(text):
+    """
+    Normalize and format a BeautifulSoup text node by casefolding and removing
+    punctuation.
+    """
+    # Only run this for text nodes, not attributes, comments, etc.
+    if isinstance(text, NavigableString) and text.parent:
+        text = normalize_text(text)
+    return EntitySubstitution.substitute_html(text)
+
+
+FORMATTER = HTMLFormatter(entity_substitution=normalize_soup_text)
 
 
 def normalize_html(html, url, remove_extra_content=True):
@@ -68,7 +105,28 @@ def normalize_html(html, url, remove_extra_content=True):
     if remove_extra_content:
         remove_extraneous_nodes(soup, url)
 
-    return soup.prettify()
+    return soup.prettify(formatter=FORMATTER)
+
+
+def get_main_content(html):
+    """
+    Attempt to find the main content area of an HTML document and return a new
+    document containing only that content. Returns `None` if not main content
+    can be found.
+    """
+    soup = html5_parser.parse(html, treebuilder='soup', return_root=False)
+    # This is definitely naive right now, and only works with well-coded pages.
+    # It's a start, though!
+    main = (soup.main
+            or soup.find(role='main')
+            or soup.find(id='main')
+            or soup.find(id='content'))
+    if not main:
+        return None
+
+    soup.body.clear()
+    soup.body.append(main)
+    return soup.prettify(formatter=FORMATTER)
 
 
 def normalize_url(url, base_url):
