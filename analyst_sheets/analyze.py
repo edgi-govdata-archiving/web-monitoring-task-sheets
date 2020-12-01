@@ -164,8 +164,8 @@ def analyze_text(page, a, b):
     # conceptually match up).
     if response_a and response_b:
         readable = True
-        text_a = response_a.text
-        text_b = response_b.text
+        text_a = '\n'.join(normalize_text(line) for line in response_a.text.split('\n'))
+        text_b = '\n'.join(normalize_text(line) for line in response_b.text.split('\n'))
         raw_diff = html_source_diff(text_a, text_b)
     else:
         text_a = a['normalized']
