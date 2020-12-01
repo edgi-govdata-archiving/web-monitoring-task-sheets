@@ -114,18 +114,53 @@ def get_main_content(html):
     document containing only that content. Returns `None` if not main content
     can be found.
     """
-    soup = html5_parser.parse(html, treebuilder='soup', return_root=False)
     # This is definitely naive right now, and only works with well-coded pages.
     # It's a start, though!
+    # Some examples of pages this can't handle:
+    #   https://www.blm.gov/nm/st/en/prog/energy.html
+    # OK, but not great:
+    #   https://www.cdc.gov/coronavirus/2019-ncov/index.html
+    soup = html5_parser.parse(html, treebuilder='soup', return_root=False)
+
+    # These obviously only work for very nicely marked-up pages. Would be good
+    # to eventually do better, but we also want to stay much more conservative
+    # than, say, Mozilla Readability. For an example of why, see:
+    #   github.com/edgi-govdata-archiving/web-monitoring-task-sheets/issues/9
+    page_header = soup.find(role='banner') or soup.header
+    page_footer = soup.find(role='contentinfo')
+    if not page_footer:
+        footers = soup.find_all('footer')
+        if footers and len(footers) > 0:
+            page_footer = footers[-1]
     main = (soup.main
             or soup.find(role='main')
-            or soup.find(id='main')
-            or soup.find(id='content'))
-    if not main:
+            or soup.find(id='main'))
+    # Making an assumption that the first <nav> is main/site-level navigation.
+    nav = soup.find('nav') or soup.find(role='navigation')
+
+    # If we couldn't find anything to demarcate useful parts of the page, bail
+    # out. Return `None` instead of the page as-is so the caller knows.
+    if not main and not page_header and not page_footer:
         return None
 
-    soup.body.clear()
-    soup.body.append(main)
+    # First, remove header + everything before and footer + everything after.
+    # The header or footer *could* be in the main content block, so we need to
+    # do this first.
+    if page_header:
+        remove_surroundings(page_header, before_only=True)
+        page_header.extract()
+    if page_footer:
+        remove_surroundings(page_footer, after_only=True)
+        page_footer.extract()
+    if nav:
+        remove_surroundings(nav, before_only=True)
+        nav.extract()
+
+    # Drop everything not in the main content area.
+    if main:
+        soup.body.clear()
+        soup.body.append(main)
+
     return soup.prettify(formatter=FORMATTER)
 
 
@@ -329,6 +364,24 @@ def remove_selectors(soup, selectors):
     selector = ', '.join(selectors)
     for node in soup.select(selector):
         node.extract()
+
+
+def remove_surroundings(target, before_only=False, after_only=False):
+    """
+    Remove elements and text before or after a given element.
+    """
+    parents = tuple(target.parents)
+    removables = []
+    if not after_only:
+        removables.append(tuple(target.previous_elements))
+    if not before_only:
+        removables.append(tuple(target.next_elements))
+    for stack in removables:
+        for node in stack:
+            if node.name == 'body':
+                break
+            elif node not in parents:
+                node.extract()
 
 
 def is_news_page(soup, url):

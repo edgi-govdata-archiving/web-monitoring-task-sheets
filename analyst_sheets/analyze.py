@@ -4,7 +4,7 @@ Tools to analyze a page.
 
 import concurrent.futures
 import multiprocessing
-from .normalize import normalize_html
+from .normalize import normalize_html, normalize_text, get_main_content
 import sys
 from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
                     parallel, parse_html_readability, ActivityMonitor)
@@ -168,8 +168,13 @@ def analyze_text(page, a, b):
         text_b = response_b.text
         raw_diff = html_source_diff(text_a, text_b)
     else:
-        text_a = re.sub(r'[\s\r\n]+', ' ', a['normalized'])
-        text_b = re.sub(r'[\s\r\n]+', ' ', b['normalized'])
+        text_a = a['normalized']
+        text_b = b['normalized']
+        body_a = get_main_content(text_a)
+        body_b = get_main_content(text_b)
+        if body_a and body_b:
+            readable = 'fallback'
+            text_a, text_b = body_a, body_b
         raw_diff = html_text_diff(text_a, text_b)
 
     diff = raw_diff['diff']
