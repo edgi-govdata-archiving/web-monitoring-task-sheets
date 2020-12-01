@@ -7,7 +7,7 @@ import multiprocessing
 from .normalize import normalize_html
 import sys
 from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
-                    load_url_readability, parallel, ActivityMonitor)
+                    parallel, parse_html_readability, ActivityMonitor)
 from .terms import KEY_TERMS, KEY_TERM_GRAMS
 from toolz.itertoolz import concat
 import threading
@@ -156,8 +156,8 @@ def calculate_percent_changed(diff):
 def analyze_text(page, a, b):
     readable = False
     with ActivityMonitor(f'load readable content for {page["uuid"]}'):
-        response_a, response_b = parallel((load_url_readability, a['uri']),
-                                          (load_url_readability, b['uri']))
+        response_a, response_b = parallel((parse_html_readability, a['response'].text, a['capture_url']),
+                                          (parse_html_readability, b['response'].text, b['capture_url']))
     # load_url_text returns None if the content couldn't be parsed by
     # readability. If either one of the original documents couldn't be parsed,
     # fall back to straight HTML text for *both* (we want what we're diffing to

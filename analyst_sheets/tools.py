@@ -234,11 +234,11 @@ def net_change(deletions, additions):
 
 
 @retry(tries=3, delay=1)
-def load_url(url, raise_status=True, timeout=5, **request_args):
+def load_url(url, raise_status=True, timeout=5, method='GET', **request_args):
     if url.startswith('https://api.monitoring.envirodatagov.org'):
-        response = db.Client.from_env().request('GET', url, **request_args)
+        response = db.Client.from_env().request(method, url, **request_args)
     else:
-        response = requests.get(url, timeout=timeout, **request_args)
+        response = requests.request(method, url, timeout=timeout, **request_args)
     if raise_status and not response.ok:
         print(f'Raising on {url}')
         response.raise_for_status()
@@ -251,9 +251,8 @@ def load_url(url, raise_status=True, timeout=5, **request_args):
 
 
 @retry(tries=2, delay=1)
-def load_url_readability(url):
-    response = load_url(f'http://localhost:7323/proxy', params={'url': url},
-                        timeout=45, raise_status=False)
+def load_url_readability(url, **request_args):
+    response = load_url(url, raise_status=False, **request_args)
 
     if response.status_code >= 500:
         try:
@@ -269,6 +268,16 @@ def load_url_readability(url):
         return None
     else:
         return response
+
+
+@retry(tries=2, delay=1)
+def parse_html_readability(html, url):
+    return load_url_readability('http://localhost:7323/text',
+                                method='POST',
+                                params={'url': url},
+                                data=html.encode('utf-8'),
+                                headers={'Content-Type': 'text/html; charset=utf-8'},
+                                timeout=45)
 
 
 def parallel(*calls):
