@@ -171,8 +171,8 @@ def analyze_text(page, a, b):
     if not any(item in page['url'] for item in SKIP_READABILITY_URLS):
         with ActivityMonitor(f'load readable content for {page["uuid"]}'):
             response_a, response_b = parallel((parse_html_readability, a['response'].text, a['capture_url']),
-                                            (parse_html_readability, b['response'].text, b['capture_url']))
-        # load_url_text returns None if the content couldn't be parsed by
+                                              (parse_html_readability, b['response'].text, b['capture_url']))
+        # parse_html_readability returns None if the content couldn't be parsed by
         # readability. If either one of the original documents couldn't be parsed,
         # fall back to straight HTML text for *both* (we want what we're diffing to
         # conceptually match up).
@@ -183,6 +183,7 @@ def analyze_text(page, a, b):
             raw_diff = html_source_diff(text_a, text_b)
 
     if not readable:
+        # Try using our own content detection as a fallback from readability.
         if content_a and content_b:
             readable = 'fallback'
             text_a, text_b = content_a, content_b
