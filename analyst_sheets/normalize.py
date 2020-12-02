@@ -2,7 +2,7 @@
 Experimental tools for normalizing HTML source before analysis. We might move
 these lower down in the dependency stack later.
 """
-from bs4 import NavigableString
+from bs4 import Comment, NavigableString
 from bs4.formatter import EntitySubstitution, HTMLFormatter
 from collections import defaultdict
 from contextlib import contextmanager
@@ -131,20 +131,38 @@ def get_main_content(html):
     # main content area.
     if soup.body.get_text().strip() == '':
         return html
+    # Similarly, bodies that only have text and no elements are OK.
+    elif all(isinstance(n, NavigableString) for n in soup.body.children):
+        return html
 
     # These obviously only work for very nicely marked-up pages. Would be good
     # to eventually do better, but we also want to stay much more conservative
     # than, say, Mozilla Readability. For an example of why, see:
     #   github.com/edgi-govdata-archiving/web-monitoring-task-sheets/issues/9
     page_header = soup.find(role='banner') or soup.header
+    if not page_header:
+        page_header = soup.body.find(string=lambda c: (
+            isinstance(c, Comment)
+            and ('end head' in c.lower() or '/head' in c.lower())
+        ))
     page_footer = soup.find(role='contentinfo')
     if not page_footer:
         footers = soup.find_all('footer')
         if footers and len(footers) > 0:
             page_footer = footers[-1]
+    if not page_footer:
+        page_footer = soup.body.find(string=lambda c: (
+            isinstance(c, Comment)
+            and ('begin foot' in c.lower() or 'start foot' in c.lower())
+        ))
     main = (soup.main
             or soup.find(role='main')
             or soup.find(id='main'))
+    if not main:
+        # If only one <article>, it's probably the main content.
+        articles = soup.find_all('article')
+        if articles and len(articles) == 1:
+            main = articles[0]
     # Making an assumption that the first <nav> is main/site-level navigation.
     nav = soup.find('nav') or soup.find(role='navigation')
 
