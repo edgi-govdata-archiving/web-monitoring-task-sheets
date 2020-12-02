@@ -155,6 +155,16 @@ def calculate_percent_changed(diff):
 
 def analyze_text(page, a, b):
     readable = False
+
+    # Check whether our readability fallback would work.
+    # We always do this (rather than only as a fallback) so we can debug issues
+    # with it by reporting any URLs that would have failed.
+    text_a = a['normalized']
+    text_b = b['normalized']
+    content_a = get_main_content(text_a)
+    content_b = get_main_content(text_b)
+    found_content_area = content_a and content_b
+
     with ActivityMonitor(f'load readable content for {page["uuid"]}'):
         response_a, response_b = parallel((parse_html_readability, a['response'].text, a['capture_url']),
                                           (parse_html_readability, b['response'].text, b['capture_url']))
@@ -168,13 +178,9 @@ def analyze_text(page, a, b):
         text_b = '\n'.join(normalize_text(line) for line in response_b.text.split('\n'))
         raw_diff = html_source_diff(text_a, text_b)
     else:
-        text_a = a['normalized']
-        text_b = b['normalized']
-        body_a = get_main_content(text_a)
-        body_b = get_main_content(text_b)
-        if body_a and body_b:
+        if content_a and content_b:
             readable = 'fallback'
-            text_a, text_b = body_a, body_b
+            text_a, text_b = content_a, content_b
         raw_diff = html_text_diff(text_a, text_b)
 
     diff = raw_diff['diff']
@@ -204,6 +210,7 @@ def analyze_text(page, a, b):
 
     return {
         'readable': readable,
+        'found_content_area': found_content_area,
         'key_terms': key_terms,
         'key_terms_changed': key_terms_changed,
         'key_terms_change_count': key_terms_change_count,
