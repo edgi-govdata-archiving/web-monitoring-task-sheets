@@ -359,9 +359,11 @@ def remove_extraneous_nodes(soup, url):
             'nav [class*="blog_content"]',
             # doi.gov
             # (ex: https://monitoring.envirodatagov.org/page/c0926b52-9361-42ba-b6f5-516a4068dedf/9ed6ef6d-caff-4b57-a4b7-1cd26bf42332..dada2ab9-64ae-4408-aee0-b1794b17e438)
-            # (Checking the container has "related-content" because I worry
-            # this is *slightly* too broad otherwise.)
-            '[class*="related_content"] [class*="press_release"]',
+            # Worried these may be slightly too broad. Should they be gated by
+            # URL with the others below?
+            '[class*="pane_related_content"]',
+            '[class*="panel_related_content"]',
+            '[class*="related_content_pane"]',
         ))
 
     # NOT GENERALIZED! These will all be very brittle, and we can't extend
