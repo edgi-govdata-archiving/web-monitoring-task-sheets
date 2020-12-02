@@ -30,7 +30,7 @@ import signal
 from web_monitoring.utils import Signal
 
 SKIP_READABILITY_URLS = frozenset((
-    'cdc.gov/'
+    'cdc.gov/',
 ))
 
 # Can Analyze? ----------------------------------------------------------------
