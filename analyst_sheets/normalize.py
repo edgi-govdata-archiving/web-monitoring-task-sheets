@@ -359,7 +359,7 @@ def remove_extraneous_nodes(soup, url):
     # TODO: search/listing result sets? e.g:
     #   - `[class*="document_lister"]` on https://monitoring.envirodatagov.org/page/050d4127-aa89-4f4c-bf43-41bb3b5b66a9/71ca0829-afd3-4299-86bc-419e2a41e1f7..19f1ed78-e089-4930-923b-4b9d63d7aa61
 
-    remove_selectors(soup, selectors)
+    remove_selectors(soup.body, selectors)
 
 
 def remove_selectors(soup, selectors):
