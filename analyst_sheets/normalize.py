@@ -126,6 +126,12 @@ def get_main_content(html):
     #   https://www.cdc.gov/coronavirus/2019-ncov/index.html
     soup = html5_parser.parse(html, treebuilder='soup', return_root=False)
 
+    # Some pages have empty bodies, and that's OK. Return a document since we
+    # can declare the main content to be empty, rather than failing to find a
+    # main content area.
+    if soup.body.get_text().strip() == '':
+        return html
+
     # These obviously only work for very nicely marked-up pages. Would be good
     # to eventually do better, but we also want to stay much more conservative
     # than, say, Mozilla Readability. For an example of why, see:

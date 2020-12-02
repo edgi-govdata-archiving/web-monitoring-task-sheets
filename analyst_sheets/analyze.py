@@ -329,6 +329,26 @@ def analyze_change_count(page, after, before):
     return factor
 
 
+META_REFRESH_PATTERN = re.compile(r'<meta[^>]+http-equiv="refresh"')
+
+
+def analyze_redirection(page, a, b):
+    redirect_a = META_REFRESH_PATTERN.search(a['response'].text) is not None
+    redirect_b = META_REFRESH_PATTERN.search(b['response'].text) is not None
+    is_redirect = ''
+    if redirect_a and redirect_b:
+        is_redirect = True
+    elif redirect_a and not redirect_b:
+        is_redirect = 'was redirect'
+    elif not redirect_a and redirect_b:
+        is_redirect = 'became redirect'
+
+    return {
+        'changed': redirect_a != redirect_b,
+        'is_redirect': is_redirect
+    }
+
+
 ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
 
 
@@ -388,6 +408,10 @@ def analyze_page(page, after, before):
     else:
         priority *= page_status_factor(page, a, b)
 
+    redirect_analysis = analyze_redirection(page, a, b)
+    if redirect_analysis['changed']:
+        priority += 0.25
+
     # Demote root pages, since they usually are just listings of other things.
     if root_page:
         priority *= 0.25
@@ -409,6 +433,7 @@ def analyze_page(page, after, before):
         links=link_analysis,
         source=source_analysis,
         text=text_analysis,
+        redirect=redirect_analysis,
     )
 
 

@@ -43,6 +43,7 @@ HEADERS = [
     'Links changes',
     '% Changed Links',
     'Removed link to self',
+    'Client Redirect?'
 ]
 
 
@@ -104,6 +105,7 @@ def format_row(page, analysis, error, index, name, timestamp):
             analysis['links']['diff_length'],
             format(analysis['links']['diff_ratio'], '.3f'),
             analysis['links']['removed_self_link'],
+            analysis['redirect']['is_redirect'],
         ])
     else:
         row.extend([
