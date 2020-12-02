@@ -382,7 +382,8 @@ def analyze_page(page, after, before):
     words on it changed between the first and latest captured versions.
     """
     assert_can_analyze(page)
-    priority = 0
+    priority = 0  # 0 = "not worth human eyes", 1 = "really needs a look."
+    baseline = 0  # Minimum priority. Some factors add to the baseline.
 
     versions_count = len(page['versions'])
     root_page = is_home_page(page)
@@ -397,7 +398,8 @@ def analyze_page(page, after, before):
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
-        priority += 0.1 + 0.3 * priority_factor(link_analysis['diff_ratio'])
+        baseline = max(baseline, 0.1)
+        priority += 0.3 * priority_factor(link_analysis['diff_ratio'])
     # This most likely indicates a page was removed from navigation! Big deal.
     if link_analysis['removed_self_link']:
         priority += 0.75
@@ -411,7 +413,7 @@ def analyze_page(page, after, before):
     # Ensure a minimum priority of both text and links changed.
     # This should probably stay less than 0.15.
     if text_analysis['diff_count'] > 0 and link_analysis['diff_length'] > 0:
-        priority = max(priority, 0.125)
+        baseline = max(baseline, 0.125)
 
     source_analysis = analyze_source(a, b)
 
@@ -424,6 +426,9 @@ def analyze_page(page, after, before):
     redirect_analysis = analyze_redirection(page, a, b)
     if redirect_analysis['changed']:
         priority += 0.25
+
+    # Ensure priority at least matches baseline.
+    priority = max(priority, baseline)
 
     # Demote root pages, since they usually are just listings of other things.
     if root_page:
