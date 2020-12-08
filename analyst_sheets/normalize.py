@@ -193,6 +193,14 @@ def get_main_content(html):
 
 
 def normalize_url(url, base_url):
+    # Shortcut for links that do nothing. Note that `urljoin` and `surt` will
+    # both drop empty fragment identifiers like this, so if we didn't return
+    # early here we'd need to ensure this gets added back to the normalized URL
+    # so we can tell the difference between a no-op link like this and a link
+    # back to the current page.
+    if url.strip() == '#':
+        return '#'
+
     try:
         absolute = urljoin(base_url, url)
         # Use SURT to do most normalization, but don't return in SURT format.
