@@ -214,6 +214,16 @@ def analyze_text(page, a, b):
     key_terms_change_count = sum((abs(count)
                                   for term, count in key_terms.items()))
 
+    longest_change = 0
+    if diff_changes:
+        longest_change = max(len(text) for code, text in diff_changes)
+    # Possible alternate take: the maximum diff *line* length. This would
+    # prevent contiguous list items or paragraphs from bulking up the "longest"
+    # change size. Not sure whether that's really good or bad, though.
+    # for code, text in diff_changes:
+    #     line_lengths = [len(line.strip()) for line in text.split('\n')]
+    #     longest_change = max(longest_change, *line_lengths)
+
     return {
         'readable': readable,
         'found_content_area': found_content_area,
@@ -224,7 +234,8 @@ def analyze_text(page, a, b):
         # 'percent_changed_words': calculate_percent_changed(word_diff),
         'diff_hash': hash_changes(diff_changes),
         'diff_count': len(diff_changes),
-        'diff_length': sum((len(text) for code, text in diff_changes)),
+        'diff_length': sum(len(text) for code, text in diff_changes),
+        'diff_max_length': longest_change,
     }
 
 
@@ -409,6 +420,11 @@ def analyze_page(page, after, before):
         priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
     if text_analysis['diff_count'] > 0:
         priority += 0.65 * priority_factor(text_analysis['percent_changed'])
+    # Increase the score if a single change is > 200 characters. The added
+    # score increases up until 600 characters.
+    if text_analysis['diff_max_length'] > 200:
+        long_change_size = min(text_analysis['diff_max_length'], 600) - 200
+        priority += 0.35 * long_change_size / 400
 
     # Ensure a minimum priority of both text and links changed.
     # This should probably stay less than 0.15.
