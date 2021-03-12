@@ -420,11 +420,11 @@ def analyze_page(page, after, before):
         priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
     if text_analysis['diff_count'] > 0:
         priority += 0.65 * priority_factor(text_analysis['percent_changed'])
-    # Increase the score if a single change is > 200 characters. The added
+    # Increase the score if a single change is > 100 characters. The added
     # score increases up until 600 characters.
-    if text_analysis['diff_max_length'] > 200:
-        long_change_size = min(text_analysis['diff_max_length'], 600) - 200
-        priority += 0.35 * long_change_size / 400
+    if text_analysis['diff_max_length'] > 100:
+        long_change_size = min(text_analysis['diff_max_length'], 600) - 100
+        priority += 0.35 * long_change_size / 500
 
     # Ensure a minimum priority of both text and links changed.
     # This should probably stay less than 0.15.
