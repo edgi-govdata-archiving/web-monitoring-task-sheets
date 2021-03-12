@@ -340,9 +340,13 @@ def remove_extraneous_nodes(soup, url):
             '.news_section',
             '.news_content',
             '.box.news',
+            '.box.related_info',
             '.pane.news',
+            '.pane.related_info',
             '.panel.news',
+            '.panel.related_info',
             '.panel_pane.news',
+            '.panel_pane.related_info',
             '[class*="pane_news"]',
             '.news_feed',
             '.home_news_feed',
@@ -384,6 +388,9 @@ def remove_extraneous_nodes(soup, url):
         selectors.append('aside [class*="related_reports"]')
     elif 'fema.gov/' in url:
         selectors.append('[class*="blockfeed_on_disaster_pages"]')
+    elif 'epa.gov/' in url:
+        # This is just a carousel with highlighted news.
+        selectors.append('[class*="epa-banner"]')
 
     # TODO: https://scenarios.globalchange.gov/regions/* has a list of images
     # that appears to be unordered or sorted on some criteria that changes
