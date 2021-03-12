@@ -406,9 +406,9 @@ def analyze_page(page, after, before):
 
     text_analysis = analyze_text(page, a, b)
     if text_analysis['key_terms_changed']:
-        priority += 0.1 * text_analysis['key_terms_change_count']
+        priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
     if text_analysis['diff_count'] > 0:
-        priority += 0.45 * priority_factor(text_analysis['percent_changed'])
+        priority += 0.65 * priority_factor(text_analysis['percent_changed'])
 
     # Ensure a minimum priority of both text and links changed.
     # This should probably stay less than 0.15.
