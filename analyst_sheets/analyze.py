@@ -163,9 +163,9 @@ def analyze_text(page, a, b):
     # with it by reporting any URLs that would have failed.
     text_a = a['normalized']
     text_b = b['normalized']
-    content_a = get_main_content(text_a)
-    content_b = get_main_content(text_b)
-    found_content_area = content_a and content_b
+    content_a, readable_a = get_main_content(text_a)
+    content_b, readable_b = get_main_content(text_b)
+    found_content_area = bool(content_a and content_b)
 
     readable = False
     if not any(item in page['url'] for item in SKIP_READABILITY_URLS):
@@ -185,8 +185,11 @@ def analyze_text(page, a, b):
     if not readable:
         # Try using our own content detection as a fallback from readability.
         if content_a and content_b:
-            readable = 'fallback'
             text_a, text_b = content_a, content_b
+            if readable_a and readable_b:
+                readable = 'fallback-yes'
+            else:
+                readable = 'fallback-no'
         raw_diff = html_text_diff(text_a, text_b)
 
     diff = raw_diff['diff']

@@ -6,6 +6,7 @@ from bs4 import Comment, NavigableString
 from bs4.formatter import EntitySubstitution, HTMLFormatter
 from collections import defaultdict
 from contextlib import contextmanager
+import copy
 import html5_parser
 import re
 import soupsieve
@@ -115,7 +116,7 @@ def normalize_html(html, url, remove_extra_content=True):
 def get_main_content(html):
     """
     Attempt to find the main content area of an HTML document and return a new
-    document containing only that content. Returns `None` if not main content
+    document containing only that content. Returns `None` if no main content
     can be found.
     """
     # This is definitely naive right now, and only works with well-coded pages.
@@ -130,10 +131,10 @@ def get_main_content(html):
     # can declare the main content to be empty, rather than failing to find a
     # main content area.
     if soup.body.get_text().strip() == '':
-        return html
+        return html, False
     # Similarly, bodies that only have text and no elements are OK.
     elif all(isinstance(n, NavigableString) for n in soup.body.children):
-        return html
+        return html, False
 
     # These obviously only work for very nicely marked-up pages. Would be good
     # to eventually do better, but we also want to stay much more conservative
@@ -163,13 +164,26 @@ def get_main_content(html):
         articles = soup.find_all('article')
         if articles and len(articles) == 1:
             main = articles[0]
+    # NOTES on `main` alternatives:
+    # - science.gsfc.nasa.gov has `#paper #contentwrapper #rightcontent` (note
+    #   that `#contentwrapper` still includes a left-sidebar nav). Can also be
+    #   found via skip links (the skip target is the first child of
+    #   #rightcontent)
+    # - www.roc.noaa.gov has `#content #wrapper` (even `#content` might be OK
+    #   enough here, but we tried it more generically and it caught too much we
+    #   didn't want). Skip links are rough here, the target is the end of the
+    #   the nav; to get to the content you have to step forward until you hit
+    #   hit `#content` (there are links after the skip target, although none
+    #   have text; walking until you hit text will get you too deeply nested in
+    #   the content area, however).
+
     # Making an assumption that the first <nav> is main/site-level navigation.
     nav = soup.find('nav') or soup.find(role='navigation')
 
     # If we couldn't find anything to demarcate useful parts of the page, bail
     # out. Return `None` instead of the page as-is so the caller knows.
     if not main and not page_header and not page_footer:
-        return None
+        return None, False
 
     # First, remove header + everything before and footer + everything after.
     # The header or footer *could* be in the main content block, so we need to
@@ -189,7 +203,45 @@ def get_main_content(html):
         soup.body.clear()
         soup.body.append(main)
 
-    return soup.prettify(formatter=FORMATTER)
+    # Detect whether the main content might be readable
+    readable = is_readable(main) if main else False
+
+    return soup.prettify(formatter=FORMATTER), readable
+
+
+def is_readable(element):
+    """
+    Detect whether an element might represent readable content. The general
+    approach here is to see how long the text is when ignoring things like
+    short bullet points, headings, asides, etc.
+    """
+    readable = False
+    body = copy.copy(element)
+    # Remove non-textual content
+    for item in body.find_all(('aside', 'nav', 'table', 'dl', 'label',
+                               'fieldset', 'noscript', 'template', 'header',
+                               'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6')):
+        item.extract()
+    for item in body.find_all(lambda node: node.get('class')):
+        css_class = ' '.join(item['class'])
+        if (
+            'banner' in css_class or
+            'aside' in css_class or
+            'header' in css_class
+        ):
+            item.extract()
+    # Remove short list items that don't seem like whole paragraphs.
+    for item in body.find_all('li'):
+        if len(normalize_text(item.get_text())) < 200:
+            item.extract()
+    for item in body.find_all('div'):
+        if len(normalize_text(item.get_text())) < 125:
+            item.extract()
+    # Check that the remaining textual content is reasonably long.
+    if len(normalize_text(body.get_text())) > 500:
+        readable = True
+
+    return readable
 
 
 def normalize_url(url, base_url):
