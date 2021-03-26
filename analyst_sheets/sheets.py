@@ -44,7 +44,10 @@ HEADERS = [
     'Links changes',
     '% Changed Links',
     'Removed link to self',
-    'Client Redirect?'
+    'Client Redirect?',
+    'Redirects Changed?',
+    'Prior Redirects',
+    'Current Redirects'
 ]
 
 
@@ -70,6 +73,8 @@ def format_row(page, analysis, error, index, name, timestamp):
     version_earliest = page['earliest']
     version_start = page['versions'][len(page['versions']) - 1]
     version_end = page['versions'][0]
+    redirects_start = version_start['source_metadata'].get('redirects', [])
+    redirects_end = version_end['source_metadata'].get('redirects', [])
 
     row = [
         index + 1,
@@ -108,6 +113,9 @@ def format_row(page, analysis, error, index, name, timestamp):
             format(analysis['links']['diff_ratio'], '.3f'),
             analysis['links']['removed_self_link'],
             analysis['redirect']['is_redirect'],
+            redirects_start == redirects_end,
+            ' → '.join(redirects_start),
+            ' → '.join(redirects_end),
         ])
     else:
         row.extend([
