@@ -6,6 +6,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 import re
+import sys
 
 
 EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
@@ -73,8 +74,8 @@ def format_row(page, analysis, error, index, name, timestamp):
     version_earliest = page['earliest']
     version_start = page['versions'][len(page['versions']) - 1]
     version_end = page['versions'][0]
-    redirects_start = version_start['source_metadata'].get('redirects', [])
-    redirects_end = version_end['source_metadata'].get('redirects', [])
+    redirects_start = format_redirects(version_start)
+    redirects_end = format_redirects(version_end)
 
     row = [
         index + 1,
@@ -114,8 +115,8 @@ def format_row(page, analysis, error, index, name, timestamp):
             analysis['links']['removed_self_link'],
             analysis['redirect']['is_redirect'],
             redirects_start == redirects_end,
-            ' → '.join(redirects_start),
-            ' → '.join(redirects_end),
+            redirects_start,
+            redirects_end,
         ])
     else:
         row.extend([
@@ -148,3 +149,12 @@ def format_hash(digest):
     if digest == EMPTY_HASH or not digest:
         return '[no change]'
     return digest[:10]
+
+
+def format_redirects(version):
+    redirects = version['source_metadata'].get('redirects') or []
+    if not isinstance(redirects, (list, tuple)):
+        print(f'Unknown type for redirects on version: {version}', f=sys.stderr)
+        return ''
+
+    return ' → '.join(redirects),
