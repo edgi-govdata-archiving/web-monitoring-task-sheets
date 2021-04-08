@@ -284,7 +284,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         no_content_unreadable = []
         for page, analysis, error in results:
             if not error and not analysis['text']['found_content_area']:
-                if analysis['redirect']['is_redirect']:
+                if analysis['redirect']['is_client_redirect']:
                     continue
                 a_id = page['versions'][len(page['versions']) - 1]['uuid']
                 b_id = page['versions'][0]['uuid']

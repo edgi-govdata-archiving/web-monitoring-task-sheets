@@ -5,6 +5,7 @@ Tools to analyze a page.
 import concurrent.futures
 import multiprocessing
 from .normalize import normalize_html, normalize_text, get_main_content
+from surt import surt
 import sys
 from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
                     parallel, parse_html_readability, ActivityMonitor)
@@ -356,23 +357,54 @@ def analyze_change_count(page, after, before):
     return factor
 
 
-META_REFRESH_PATTERN = re.compile(r'<meta[^>]+http-equiv="refresh"')
+META_REFRESH_PATTERN = re.compile(r'<meta[^>]+http-equiv="refresh"[^>]*')
+META_REFRESH_URL_PATTERN = re.compile(r'content="\d+(\.\d*)?;\s*url=([^"]+)"')
 
 
-def analyze_redirection(page, a, b):
-    redirect_a = META_REFRESH_PATTERN.search(a['response'].text) is not None
-    redirect_b = META_REFRESH_PATTERN.search(b['response'].text) is not None
-    is_redirect = ''
-    if redirect_a and redirect_b:
-        is_redirect = True
-    elif redirect_a and not redirect_b:
-        is_redirect = 'was redirect'
-    elif not redirect_a and redirect_b:
-        is_redirect = 'became redirect'
+def get_client_redirect(version):
+    match = META_REFRESH_PATTERN.search(version['response'].text)
+    if match:
+        url_match = META_REFRESH_URL_PATTERN.search(match.group(0))
+        if url_match:
+            return url_match.group(2)
+
+    return None
+
+
+def get_redirects(version):
+    server = version['source_metadata'].get('redirects') or []
+    if not isinstance(server, (list, tuple)):
+        raise ValueError(f'Unknown type for redirects on version: {version}')
+
+    client = get_client_redirect(version)
+    combined = server + ([client] if client else [])
+    return combined, server, client
+
+
+
+def analyze_redirects(page, a, b):
+    a_all, a_server, a_client = get_redirects(a)
+    b_all, b_server, b_client = get_redirects(b)
+
+    is_client_redirect = ''
+    if a_client and b_client:
+        is_client_redirect = True
+    elif a_client and not b_client:
+        is_client_redirect = 'was redirect'
+    elif not a_client and b_client:
+        is_client_redirect = 'became redirect'
+
+    final_a = surt(a_all[-1], reverse_ipaddr=False, surt=False) if len(a_all) else ''
+    final_b = surt(b_all[-1], reverse_ipaddr=False, surt=False) if len(b_all) else ''
 
     return {
-        'changed': redirect_a != redirect_b,
-        'is_redirect': is_redirect
+        'changed': final_a != final_b,
+        'client_changed': a_client != b_client,
+        'is_client_redirect': is_client_redirect,
+        'a_server': a_server,
+        'b_server': b_server,
+        'a_client': a_client,
+        'b_client': b_client,
     }
 
 
@@ -442,7 +474,7 @@ def analyze_page(page, after, before):
     else:
         priority *= page_status_factor(page, a, b)
 
-    redirect_analysis = analyze_redirection(page, a, b)
+    redirect_analysis = analyze_redirects(page, a, b)
     if redirect_analysis['changed']:
         priority += 0.25
 

@@ -74,8 +74,6 @@ def format_row(page, analysis, error, index, name, timestamp):
     version_earliest = page['earliest']
     version_start = page['versions'][len(page['versions']) - 1]
     version_end = page['versions'][0]
-    redirects_start = format_redirects(version_start)
-    redirects_end = format_redirects(version_end)
 
     row = [
         index + 1,
@@ -113,10 +111,10 @@ def format_row(page, analysis, error, index, name, timestamp):
             analysis['links']['diff_length'],
             format(analysis['links']['diff_ratio'], '.3f'),
             analysis['links']['removed_self_link'],
-            analysis['redirect']['is_redirect'],
-            redirects_start == redirects_end,
-            redirects_start,
-            redirects_end,
+            analysis['redirect']['is_client_redirect'] or '',
+            analysis['redirect']['changed'] or '',
+            format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
+            format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
         ])
     else:
         row.extend([
@@ -151,10 +149,9 @@ def format_hash(digest):
     return digest[:10]
 
 
-def format_redirects(version):
-    redirects = version['source_metadata'].get('redirects') or []
-    if not isinstance(redirects, (list, tuple)):
-        print(f'Unknown type for redirects on version: {version}', f=sys.stderr)
-        return ''
+def format_redirects(server_redirects, client_redirect=None):
+    formatted = ' → '.join(server_redirects)
+    if client_redirect:
+        formatted = f' ⇥ {client_redirect}'
 
-    return ' → '.join(redirects),
+    return formatted
