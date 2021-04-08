@@ -231,7 +231,10 @@ def log_error(output, verbose, item):
     if error and not isinstance(error, analyze.AnalyzableError):
         output.write(f'ERROR {page["uuid"]}: {error}')
         if verbose:
-            traceback.print_tb(error.__traceback__, file=output)
+            if hasattr(error, 'traceback'):
+                output.write('\n'.join(error.traceback))
+            else:
+                traceback.print_tb(error.__traceback__, file=output)
 
 
 def pretty_print_analysis(page, analysis, output=None):

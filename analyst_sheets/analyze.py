@@ -12,6 +12,7 @@ from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
 from .terms import KEY_TERMS, KEY_TERM_GRAMS
 from toolz.itertoolz import concat
 import threading
+import traceback
 
 from collections import Counter
 from contextlib import contextmanager
@@ -516,6 +517,9 @@ def work_page(after, before, page):
             result = analyze_page(page, after, before)
             return (page, result, None)
     except Exception as error:
+        if not isinstance(error, AnalyzableError):
+            # Format/serialize the traceback so it can cross process boundaries
+            error.traceback = traceback.format_tb(error.__traceback__)
         # TODO: add option for more detailed logging
         return (page, None, error)
 
