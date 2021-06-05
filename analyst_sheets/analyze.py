@@ -108,7 +108,7 @@ def is_analyzable_media(version):
         return media in ALLOWED_MEDIA or (
             media.startswith('text/') and media not in DISALLOWED_MEDIA)
     elif not REQUIRE_MEDIA_TYPE:
-        return is_allowed_extension(version['capture_url'])
+        return is_allowed_extension(version['url'])
     else:
         return False
 
@@ -129,10 +129,10 @@ def assert_can_analyze(page):
     a = page['versions'][-1]
     b = page['versions'][0]
 
-    if a['version_hash'] == b['version_hash']:
+    if a['body_hash'] == b['body_hash']:
         raise NoChangeError('First and last versions were exactly the same')
 
-    if not is_fetchable(a['uri']) or not is_fetchable(b['uri']):
+    if not is_fetchable(a['body_url']) or not is_fetchable(b['body_url']):
         raise AnalyzableError('Raw response data for page is not retrievable')
 
     if not is_analyzable_media(a) or not is_analyzable_media(b):
@@ -172,8 +172,8 @@ def analyze_text(page, a, b):
     readable = False
     if not any(item in page['url'] for item in SKIP_READABILITY_URLS):
         with ActivityMonitor(f'load readable content for {page["uuid"]}'):
-            response_a, response_b = parallel((parse_html_readability, a['response'].text, a['capture_url']),
-                                              (parse_html_readability, b['response'].text, b['capture_url']))
+            response_a, response_b = parallel((parse_html_readability, a['response'].text, a['url']),
+                                              (parse_html_readability, b['response'].text, b['url']))
         # parse_html_readability returns None if the content couldn't be parsed by
         # readability. If either one of the original documents couldn't be parsed,
         # fall back to straight HTML text for *both* (we want what we're diffing to
@@ -249,7 +249,7 @@ def analyze_links(a, b):
     # diff = links_diff_json(a['response'].text, b['response'].text)['diff']
     diff = links_diff_json(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
-    removed_self_link = any((item[1]['href'] == a['capture_url'] or item[1]['href'] == b['capture_url']
+    removed_self_link = any((item[1]['href'] == a['url'] or item[1]['href'] == b['url']
                              for item in diff
                              if item[0] == -1))
 
@@ -382,7 +382,6 @@ def get_redirects(version):
     return combined, server, client
 
 
-
 def analyze_redirects(page, a, b):
     a_all, a_server, a_client = get_redirects(a)
     b_all, b_server, b_client = get_redirects(b)
@@ -438,10 +437,10 @@ def analyze_page(page, after, before):
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
     with ActivityMonitor(f'load raw content for {page["uuid"]}'):
-        a['response'], b['response'] = parallel((load_url, a['uri']),
-                                                (load_url, b['uri']))
-    a['normalized'] = normalize_html(a['response'].text, a['capture_url'])
-    b['normalized'] = normalize_html(b['response'].text, b['capture_url'])
+        a['response'], b['response'] = parallel((load_url, a['body_url']),
+                                                (load_url, b['body_url']))
+    a['normalized'] = normalize_html(a['response'].text, a['url'])
+    b['normalized'] = normalize_html(b['response'].text, b['url'])
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
