@@ -22,6 +22,29 @@ def get_thread_client():
     return client_storage.client
 
 
+def migrate_version(version):
+    """
+    Migrate a version record to match the upcoming API format in:
+    https://github.com/edgi-govdata-archiving/web-monitoring-db/issues/776
+    """
+    if 'uri' in version:
+        version['body_url'] = version['uri']
+        del version['uri']
+
+    if 'capture_url' in version:
+        version['url'] = version['capture_url']
+        del version['capture_url']
+
+    if 'version_hash' in version:
+        version['body_hash'] = version['version_hash']
+        del version['version_hash']
+
+    if version.get('source_metadata') and not version.get('headers'):
+        version['headers'] = version['source_metadata'].get('headers')
+
+    return version
+
+
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
     client = client or get_thread_client()
 
@@ -60,6 +83,8 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
                                    chunk_size=chunk_size)
 
     for version in versions:
+        # TODO: remove when API is fully migrated.
+        version = migrate_version(version)
         yield version
         if cancel and cancel.is_set():
             return
@@ -78,9 +103,10 @@ def get_earliest_version(page_id, cancel=None, client=None):
     if cancel and cancel.is_set():
         return
 
-    return next(client.get_versions(page_id=page_id,
-                                    sort=['capture_time:asc'],
-                                    chunk_size=1))
+    version = next(client.get_versions(page_id=page_id,
+                                       sort=['capture_time:asc'],
+                                       chunk_size=1))
+    return migrate_version(version)
 
 
 def add_versions_to_page(page, after, before):
@@ -93,7 +119,7 @@ def add_versions_to_page(page, after, before):
 
     def get_status(version):
         status = version.get('status') or 200
-        if status == 200 and version.get('content_length', -1) == 0:
+        if status == 200 and version.get('body_length', -1) == 0:
             return 500
         else:
             return status
