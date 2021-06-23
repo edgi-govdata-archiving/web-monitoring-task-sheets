@@ -300,7 +300,7 @@ def get_base_url(soup, url):
     str
     """
     base = soup.find('base')
-    if base and base['href']:
+    if base and base.get('href'):
         return urljoin(url, base['href'].strip())
     else:
         return url
