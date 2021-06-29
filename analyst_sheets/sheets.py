@@ -71,7 +71,6 @@ def write_csv(parent_directory, name, rows):
 
 
 def format_row(page, analysis, error, index, name, timestamp):
-    version_earliest = page['earliest']
     version_start = page['versions'][len(page['versions']) - 1]
     version_end = page['versions'][0]
 
@@ -85,9 +84,13 @@ def format_row(page, analysis, error, index, name, timestamp):
         page['url'],
         '',
         create_view_url(page, version_start, version_end),
-        create_view_url(page, version_earliest, version_end),
+        # Empty column for "latest to base"; it's only present to preserve
+        # column order for pasting into the significant changes sheet.
+        '',
         version_end['capture_time'].isoformat(),
-        version_earliest['capture_time'].isoformat(),
+        # Empty column for earliest capture time
+        # (see above about "latest to base").
+        '',
     ]
 
     if analysis:

@@ -30,6 +30,8 @@ def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=No
                              active=True,
                              include_total=total,
                              # start_date=after, end_date=before,
+                             # include_* is very problematic; don't use it.
+                             # (See https://github.com/edgi-govdata-archiving/web-monitoring-db/issues/858)
                              # include_earliest=True,
                              sort=['created_at:asc'],
                              chunk_size=500)
@@ -133,13 +135,15 @@ def add_versions_to_page(page, after, before):
 
         version_after = version
 
-    if len(versions) >= 2:
-        page['earliest'] = get_earliest_version(page['uuid'])
-    else:
-        # Since there aren't at least two versions to compare, this page won't
-        # actually get analyzed, so don't bother loading the earliest version.
-        # Set an empty value so we can safely check the `earliest` key.
-        page['earliest'] = None
+    # NOTE: temporarily removing earliest version retrieval. We don't currently
+    # use it, but *may* need to bring it back, so not removing entirely.
+    # if len(versions) >= 2:
+    #     page['earliest'] = get_earliest_version(page['uuid'])
+    # else:
+    #     # Since there aren't at least two versions to compare, this page won't
+    #     # actually get analyzed, so don't bother loading the earliest version.
+    #     # Set an empty value so we can safely check the `earliest` key.
+    #     page['earliest'] = None
 
     # all_versions = list(list_page_versions(page['uuid'], None, before))
     # page['earliest'] = all_versions[-1] if len(all_versions) > 0 else None
