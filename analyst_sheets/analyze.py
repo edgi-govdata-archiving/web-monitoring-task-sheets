@@ -159,7 +159,7 @@ def calculate_percent_changed(diff):
     return changed_size / total_size
 
 
-def analyze_text(page, a, b):
+def analyze_text(page, a, b, use_readability=True):
     # Check whether our readability fallback would work.
     # We always do this (rather than only as a fallback) so we can debug issues
     # with it by reporting any URLs that would have failed.
@@ -170,7 +170,10 @@ def analyze_text(page, a, b):
     found_content_area = bool(content_a and content_b)
 
     readable = False
-    if not any(item in page['url'] for item in SKIP_READABILITY_URLS):
+    if (
+        use_readability and
+        not any(item in page['url'] for item in SKIP_READABILITY_URLS)
+    ):
         with ActivityMonitor(f'load readable content for {page["uuid"]}'):
             response_a, response_b = parallel((parse_html_readability, a['response'].text, a['url']),
                                               (parse_html_readability, b['response'].text, b['url']))
@@ -422,7 +425,7 @@ def priority_factor(ratio):
     return math.log(1 + (math.e - 1) * ratio)
 
 
-def analyze_page(page, after, before):
+def analyze_page(page, after, before, use_readability=True):
     """
     Analyze a page from web-monitoring-db and return information about how the
     words on it changed between the first and latest captured versions.
@@ -450,7 +453,7 @@ def analyze_page(page, after, before):
     if link_analysis['removed_self_link']:
         priority += 0.75
 
-    text_analysis = analyze_text(page, a, b)
+    text_analysis = analyze_text(page, a, b, use_readability)
     if text_analysis['key_terms_changed']:
         priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
     if text_analysis['diff_count'] > 0:
@@ -506,14 +509,14 @@ def analyze_page(page, after, before):
     )
 
 
-def work_page(after, before, page):
+def work_page(after, before, use_readability, page):
     """
     In-process wrapper for analyze_page() that handles exceptions because
     Python multiprocessing seems to have issues with actual raised exceptions.
     """
     try:
         with ActivityMonitor(f'analyze {page["uuid"]}', alert_after=30):
-            result = analyze_page(page, after, before)
+            result = analyze_page(page, after, before, use_readability)
             return (page, result, None)
     except Exception as error:
         if not isinstance(error, AnalyzableError):
@@ -534,7 +537,7 @@ def setup_worker():
     handler.__enter__()
 
 
-def analyze_pages(pages, after, before, parallel=None, cancel=None):
+def analyze_pages(pages, after, before, use_readability=True, parallel=None, cancel=None):
     """
     Analyze a set of pages in parallel across multiple processes. Yields tuples
     for each page with:
@@ -554,7 +557,7 @@ def analyze_pages(pages, after, before, parallel=None, cancel=None):
         if cancel:
             close_on_event(pool, cancel)
 
-        work = functools.partial(work_page, after, before)
+        work = functools.partial(work_page, after, before, use_readability)
         yield from pool.imap_unordered(work, pages)
         pool.close()
 

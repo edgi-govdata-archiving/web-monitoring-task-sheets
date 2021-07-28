@@ -256,7 +256,7 @@ def pretty_print_analysis(page, analysis, output=None):
         print(message, file=sys.stderr)
 
 
-def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, verbose=False):
+def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, verbose=False, use_readability=True):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
         if output_path:
@@ -277,7 +277,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         def iterate_all(source):
             yield from source
         pages_and_versions_queue = generate_on_thread(iterate_all, pages_and_versions, cancel=cancel).output
-        results = analyze.analyze_pages(pages_and_versions_queue, after, before, cancel=cancel)
+        results = analyze.analyze_pages(pages_and_versions_queue, after, before, use_readability=use_readability, cancel=cancel)
         # results = analyze.analyze_pages(pages_and_versions, after, before, cancel=cancel)
         progress = tqdm(results, desc='analyzing', unit=' pages', total=page_count)
         # Log any unexpected errors along the way.
@@ -375,6 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
     parser.add_argument('--threshold', type=float, default=0.15, help='Minimum priority value to include in output.')
     parser.add_argument('--verbose', action='store_true', help='Show detailed error messages')
+    parser.add_argument('--skip-readability', dest='use_readability', action='store_false', help='Do not use readability to parse pages.')
     # Need the ability to actually start/stop the readability server if we want this option
     # parser.add_argument('--readability', action='store_true', help='Only analyze pages with URLs matching this pattern.')
     options = parser.parse_args()
@@ -397,4 +398,5 @@ if __name__ == '__main__':
          after=options.after,
          output_path=options.output,
          threshold=options.threshold,
-         verbose=options.verbose)
+         verbose=options.verbose,
+         use_readability=options.use_readability)
