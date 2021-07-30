@@ -290,7 +290,7 @@ def hash_changes(diff):
 # below method could be inaccurate if `a` was a spurious error.
 # See: https://github.com/edgi-govdata-archiving/web-monitoring-db/issues/630
 def page_status_changed(page, a, b):
-    page_ok = page['status'] >= 400
+    page_ok = page.get('status', b['status']) >= 400
     first_ok = a['status'] >= 400
     return page_ok != first_ok
 
@@ -499,7 +499,7 @@ def analyze_page(page, after, before, use_readability=True):
         priority=max(min(priority, 1), 0),
         versions=versions_count,
         root_page=root_page,
-        status=page['status'],
+        status=page.get('status', b['status']),
         status_changed=status_changed,
         view_url=f'https://monitoring.envirodatagov.org/page/{page["uuid"]}/{a["uuid"]}..{b["uuid"]}',
         links=link_analysis,
