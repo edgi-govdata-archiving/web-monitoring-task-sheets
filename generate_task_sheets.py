@@ -322,7 +322,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         # END DEBUG READABLILITY FALLBACK
 
         # Filter out results under the threshold
-        results = filter(lambda item: item[1] is None or item[1]['priority'] > threshold,
+        results = filter(lambda item: item[1] is None or item[1]['priority'] >= threshold,
                          results)
 
         # If we aren't writing to disk, just print the high-priority results.
@@ -373,7 +373,7 @@ if __name__ == '__main__':
     parser.add_argument('--tag', action='append', help='Only anlyze pages with this tag (repeat for multiple tags).')
     parser.add_argument('--after', type=timeframe_date, help='Only include versions after this date. May also be a number of hours before the current time.')
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
-    parser.add_argument('--threshold', type=float, default=0.15, help='Minimum priority value to include in output.')
+    parser.add_argument('--threshold', type=float, default=0.5, help='Minimum priority value to include in output.')
     parser.add_argument('--verbose', action='store_true', help='Show detailed error messages')
     parser.add_argument('--skip-readability', dest='use_readability', action='store_false', help='Do not use readability to parse pages.')
     # Need the ability to actually start/stop the readability server if we want this option
