@@ -333,7 +333,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
             return
 
         # Otherwise, prepare spreadsheets and write them to disk!
-        sheet_groups = group_by_tags(results, ['2l-domain:', 'tag2:', 'news'])
+        sheet_groups = group_by_tags(results, ['2l-domain:', '2025-seed-category:', 'news'])
         for sheet_name, results in sheet_groups.items():
             # Group results into similar changes and sort those groups.
             grouped_results = group_by_hash(results)
