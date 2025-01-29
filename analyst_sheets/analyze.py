@@ -4,7 +4,7 @@ Tools to analyze a page.
 
 import concurrent.futures
 import multiprocessing
-from .normalize import normalize_html, normalize_text, get_main_content
+from .normalize import normalize_html, normalize_text, normalize_url, get_main_content
 from surt import surt
 import sys
 from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
@@ -252,9 +252,12 @@ def analyze_links(a, b):
     # diff = links_diff_json(a['response'].text, b['response'].text)['diff']
     diff = links_diff_json(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
-    removed_self_link = any((item[1]['href'] == a['url'] or item[1]['href'] == b['url']
-                             for item in diff
-                             if item[0] == -1))
+
+    a_url = normalize_url(a['url'], a['url'])
+    b_url = normalize_url(b['url'], b['url'])
+    removed_self_link = any(link['href'] == a_url or link['href'] == b_url
+                            for change, link in diff
+                            if change == -1)
 
     # TODO: differentiate fragment vs. external links and treat differently?
     return dict(
