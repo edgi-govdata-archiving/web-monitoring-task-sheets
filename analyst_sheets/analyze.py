@@ -248,8 +248,6 @@ def analyze_text(page, a, b, use_readability=True):
 
 
 def analyze_links(a, b):
-    # EXPERIMENT: use normalized HTML for analysis.
-    # diff = links_diff_json(a['response'].text, b['response'].text)['diff']
     diff = links_diff_json(a['normalized'], b['normalized'])['diff']
     diff_changes = [item for item in diff if item[0] != 0]
 
