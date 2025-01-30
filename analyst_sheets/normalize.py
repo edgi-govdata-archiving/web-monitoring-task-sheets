@@ -63,7 +63,7 @@ def normalize_html(html, url, remove_extra_content=True):
     - etc.
     """
     soup = html5_parser.parse(html, treebuilder='soup', return_root=False)
-    base = get_base_url(soup, url)
+    base = normalize_url('', get_base_url(soup, url))
 
     with optimized_soupsieve():
         # Update Link URLs
@@ -256,8 +256,12 @@ def normalize_url(url, base_url):
     try:
         absolute = urljoin(base_url, url)
         # Use SURT to do most normalization, but don't return in SURT format.
+        # Also store the hash to add back after. SURT always removes it, even if
+        # you set `strip_hash=True`.
+        hash = absolute.partition('#')[2]
         result = surt(absolute, reverse_ipaddr=False, surt=False,
                       with_scheme=True)
+        result += '#' + hash
     except ValueError:
         # If the source was malformed or otherwise an invalid URL, just return
         # the original value for comparison.
