@@ -331,9 +331,10 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 
             with (output_path / 'results.json').open('w') as f:
-                f.write('[\n')
                 count = len(results)
-                for index, (page, analysis, error) in enumerate(results):
+                sorted_results = sorted(results, key=lambda r: r[0]['url_key'])
+                f.write('[\n')
+                for index, (page, analysis, error) in enumerate(sorted_results):
                     serializable_page = page.copy()
 
                     # FIXME: should not have to clean these up. Should not be
@@ -369,7 +370,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         # If we aren't writing to disk, just print the high-priority results.
         if not output_path:
             for page, analysis, error in results:
-                if analysis: # and analysis['priority'] >= 0: # 0.5:
+                if analysis:  # and analysis['priority'] >= 0: # 0.5:
                     pretty_print_analysis(page, analysis, tqdm)
             return
 
