@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import dateutil.parser
 from dateutil.tz import tzutc
+import json
 from pathlib import Path
 from retry import retry
 import signal
@@ -74,15 +75,15 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
                                        chunk_size=1))
 
 
-def get_earliest_version(page_id, cancel=None, client=None):
-    client = client or get_thread_client()
+# def get_earliest_version(page_id, cancel=None, client=None):
+#     client = client or get_thread_client()
 
-    if cancel and cancel.is_set():
-        return
+#     if cancel and cancel.is_set():
+#         return
 
-    return next(client.get_versions(page_id=page_id,
-                                    sort=['capture_time:asc'],
-                                    chunk_size=1))
+#     return next(client.get_versions(page_id=page_id,
+#                                     sort=['capture_time:asc'],
+#                                     chunk_size=1))
 
 
 def add_versions_to_page(page, after, before):
@@ -320,6 +321,46 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         else:
             print('\n'.join(readability_debug), file=sys.stderr)
         # END DEBUG READABLILITY FALLBACK
+
+        # TODO: should probably be moved to another module?
+        if output_path:
+            def serializer(obj):
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                # return f'!!! type:{type(obj)} !!!'
+                raise TypeError(f'Cannot JSON serialize {type(obj)}')
+
+            with (output_path / 'results.json').open('w') as f:
+                f.write('[\n')
+                count = len(results)
+                for index, (page, analysis, error) in enumerate(results):
+                    serializable_page = page.copy()
+
+                    # FIXME: should not have to clean these up. Should not be
+                    # attached to version objects in analyze module.
+                    first_version = page['versions'][0].copy()
+                    del first_version['response']
+                    del first_version['normalized']
+                    if len(page['versions']) > 0:
+                        serializable_page['versions'] = [
+                            first_version,
+                            *[{} for v in page['versions'][1:-1]]
+                        ]
+                    if len(page['versions']) > 1:
+                        last_version = page['versions'][-1].copy()
+                        del last_version['response']
+                        del last_version['normalized']
+                        serializable_page['versions'].append(last_version)
+
+                    json.dump({
+                        'page': serializable_page,
+                        'analysis': analysis,
+                        'error': error
+                    }, f, default=serializer)
+                    if index + 1 < count:
+                        f.write(',\n')
+
+                f.write('\n]')
 
         # Filter out results under the threshold
         results = filter(lambda item: item[1] is None or item[1]['priority'] >= threshold,
