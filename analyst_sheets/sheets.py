@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 import sys
+from surt import surt
 
 
 EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
@@ -21,8 +22,8 @@ HEADERS = [
     'Page Title',
     'URL',
     '---',
-    'This Period - Side by Side',
-    'Latest to Base - Side by Side',
+    'Scanner Comparison',
+    'IA Comparison',
     'Date Found - Latest',
     'Date Found - Base',
     'Diff Length',
@@ -86,10 +87,10 @@ def format_row(page, analysis, error, index, name, timestamp):
         create_view_url(page, version_start, version_end),
         # Empty column for "latest to base"; it's only present to preserve
         # column order for pasting into the significant changes sheet.
-        '',
+        create_ia_changes_url(page, version_start, version_end),
         version_end['capture_time'].isoformat(),
-        # Empty column for earliest capture time
-        # (see above about "latest to base").
+        # Empty column for earliest capture time. It's unused and only present
+        # to preserve column order for pasting into other spreadsheets.
         '',
     ]
 
@@ -144,6 +145,22 @@ def create_view_url(page, a, b):
     a_id = a['uuid'] if a else ''
     b_id = b['uuid'] if b else ''
     return f'https://monitoring.envirodatagov.org/page/{page["uuid"]}/{a_id}..{b_id}'
+
+
+def create_ia_changes_url(page, a, b) -> str:
+    if (
+        a and b
+        and a['source_type'] == 'internet_archive'
+        and b['source_type'] == 'internet_archive'
+        and surt(a['url'], reverse_ipaddr=False) == surt(b['url'], reverse_ipaddr=False)
+    ):
+        return f'https://web.archive.org/web/diff/{ia_timestamp(a["capture_time"])}/{b["capture_time"]}/{b["url"]}'
+    else:
+        return ''
+
+
+def ia_timestamp(datetime):
+    return datetime.strftime('%Y%m%d%H%M%S')
 
 
 def format_hash(digest):
