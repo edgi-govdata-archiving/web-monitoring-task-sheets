@@ -197,14 +197,40 @@ def analyze_text(page, a, b, use_readability=True):
                 readable = 'fallback-no'
         raw_diff = html_text_diff(text_a, text_b)
 
-    diff = raw_diff['diff']
+    diff: list[tuple[int, str]] = raw_diff['diff'].copy()
+    # Try to suss out "moves" by stripping matching additions and deletions from
+    # the diff. We really want this *in the differ*, but this will have to do
+    # for now. This is also not smart about when an insertion is a subset of a
+    # deletion (or vice-versa).
+    index = 0
+    while index + 1 < len(diff):
+        operation, text = diff[index]
+        if operation == -1:
+            try:
+                opposite_index = diff.index((1, text), index + 1)
+                diff.pop(opposite_index)
+                diff.pop(index)
+                continue
+            except ValueError:
+                pass
+        elif operation == 1:
+            try:
+                opposite_index = diff.index((-1, text), index + 1)
+                diff.pop(opposite_index)
+                diff.pop(index)
+                continue
+            except ValueError:
+                pass
+
+        index += 1
+
     diff_changes = [item for item in diff if item[0] != 0]
 
     # This script leverages our textual diffing routines, which work
     # character-by-character, so we have to recompose the results into *words*.
     # That's a little absurd, and we might be better off in the future to
     # tokenize the words and diff them directly instead.
-    word_diff = CharacterToWordDiffs.word_diffs(raw_diff['diff'])
+    word_diff = CharacterToWordDiffs.word_diffs(diff)
 
     # Count the terms that were added and removed.
     grams = KEY_TERM_GRAMS
@@ -238,7 +264,7 @@ def analyze_text(page, a, b, use_readability=True):
         'key_terms': key_terms,
         'key_terms_changed': key_terms_changed,
         'key_terms_change_count': key_terms_change_count,
-        'percent_changed': calculate_percent_changed(raw_diff['diff']),
+        'percent_changed': calculate_percent_changed(diff),
         # 'percent_changed_words': calculate_percent_changed(word_diff),
         'diff_hash': hash_changes(diff_changes),
         'diff_count': len(diff_changes),
