@@ -403,8 +403,8 @@ def analyze_redirects(page, a, b):
     elif not a_client and b_client:
         is_client_redirect = 'became redirect'
 
-    final_a = surt(a_all[-1], reverse_ipaddr=False, surt=False) if len(a_all) else ''
-    final_b = surt(b_all[-1], reverse_ipaddr=False, surt=False) if len(b_all) else ''
+    final_a = surt(a_all[-1] if len(a_all) else a['url'], reverse_ipaddr=False)
+    final_b = surt(b_all[-1] if len(b_all) else b['url'], reverse_ipaddr=False)
 
     return {
         'changed': final_a != final_b,
