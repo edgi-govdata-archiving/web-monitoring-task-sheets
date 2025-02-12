@@ -147,6 +147,7 @@ def maybe_bad_capture(version) -> bool:
     #     x_cache = headers.get('x-cache', '').lower()
     #     cache_miss = x_cache and not x_cache.startswith('hit')
     #     return content_type.startswith('text/html') and is_short_or_unknown and cache_miss
+    return False
 
 
 def add_versions_to_page(page, after, before):
