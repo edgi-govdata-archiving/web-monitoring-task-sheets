@@ -258,10 +258,11 @@ def normalize_url(url, base_url):
         # Use SURT to do most normalization, but don't return in SURT format.
         # Also store the hash to add back after. SURT always removes it, even if
         # you set `strip_hash=True`.
-        hash = absolute.partition('#')[2]
+        hash_part = absolute.partition('#')[2]
         result = surt(absolute, reverse_ipaddr=False, surt=False,
                       with_scheme=True)
-        result += '#' + hash
+        if hash_part:
+            result += '#' + hash_part
     except ValueError:
         # If the source was malformed or otherwise an invalid URL, just return
         # the original value for comparison.
