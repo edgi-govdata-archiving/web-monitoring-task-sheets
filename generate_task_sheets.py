@@ -271,7 +271,6 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         pages_and_versions = map_parallel(add_versions_to_page, pages, after,
                                           before, cancel=cancel,
                                           parallel=4).output
-        pages_and_versions = (p for p in pages_and_versions if p['versions'])
 
         # Separate progress bar just for data loading from Scanner's DB
         pages_and_versions = tqdm(pages_and_versions, desc='  loading',
