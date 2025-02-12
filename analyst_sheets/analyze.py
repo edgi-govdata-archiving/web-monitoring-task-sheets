@@ -313,19 +313,39 @@ def hash_changes(diff):
     return hashlib.sha256(diff_bytes).hexdigest()
 
 
+def get_version_status(version: dict) -> int:
+    status = version['status'] or (600 if version['network_error'] else 200)
+
+    # Special case for 'greet.anl.gov', which seems to occasionally respond
+    # with a 500 status code even though it's definitely OK content.
+    # We've never seen a real 500 error there, so this is based on what we've
+    # seen with 404 errors.
+    if (
+        status == 500
+        and 'greet.anl.gov/' in version['url']
+        and '500' not in version['title']
+    ):
+        status = 200
+
+    return status
+
+
 def page_status_changed(page, a, b) -> bool:
-    first_ok = (a['status'] or 600) < 400
-    page_ok = (b['status'] or 600) < 400
+    first_ok = get_version_status(a) < 400
+    page_ok = get_version_status(b) < 400
     return page_ok != first_ok
 
 
-def status_code_type(status):
-    if status is None or status < 400:
-        return None
-    elif status < 500:
+def status_error_type(version) -> str | None:
+    status = get_version_status(version)
+    if status >= 600:
+        return 'network'
+    elif status >= 500:
+        return 'server'
+    elif status >= 400:
         return 'user'
     else:
-        return 'server'
+        return None
 
 
 def page_status_factor(page, a, b):
@@ -336,8 +356,8 @@ def page_status_factor(page, a, b):
     both errors, deprioritize a bit, and if they were the same type of error
     (e.g. both were 4xx errors), deprioritize a lot.
     """
-    a_error = status_code_type(a['status'])
-    b_error = status_code_type(b['status'])
+    a_error = status_error_type(a)
+    b_error = status_error_type(b)
     if a_error is None or b_error is None:
         return 1
     elif a_error == b_error:
