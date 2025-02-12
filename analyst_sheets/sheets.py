@@ -154,7 +154,9 @@ def create_ia_changes_url(page, a, b) -> str:
         and b['source_type'] == 'internet_archive'
         and surt(a['url'], reverse_ipaddr=False) == surt(b['url'], reverse_ipaddr=False)
     ):
-        return f'https://web.archive.org/web/diff/{ia_timestamp(a["capture_time"])}/{b["capture_time"]}/{b["url"]}'
+        a_time = ia_timestamp(a["capture_time"])
+        b_time = ia_timestamp(b["capture_time"])
+        return f'https://web.archive.org/web/diff/{a_time}/{b_time}/{b["url"]}'
     else:
         return ''
 
