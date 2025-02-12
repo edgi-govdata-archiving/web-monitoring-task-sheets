@@ -97,9 +97,10 @@ def maybe_bad_capture(version) -> bool:
     These don't represent what a regular user should have seen at the time, so
     we should avoid using them as candidates for comparison.
     """
+    headers = version['headers'] or {}
     content_length = version['content_length']
     if content_length is None:
-        content_length = int(version['headers'].get('content-length', '-1'))
+        content_length = int(headers.get('content-length', '-1'))
 
     status = version['status'] or 200
     if status == 200 and content_length == 0:
@@ -108,29 +109,29 @@ def maybe_bad_capture(version) -> bool:
     if status < 400:
         return False
 
-    server = version['headers'].get('server', '').lower()
+    server = headers.get('server', '').lower()
 
     no_cache = False
-    if 'cache-control' in version['headers']:
-        cache_control = version['headers']['cache-control'].lower()
+    if 'cache-control' in headers:
+        cache_control = headers['cache-control'].lower()
         if 'no-cache' in cache_control:
             no_cache = True
         elif 'max-age=0' in cache_control:
             no_cache = True
-    if no_cache is False and 'expires' in version['headers']:
-        expires = dateutil.parser.parse(version['headers']['expires'])
+    if no_cache is False and 'expires' in headers:
+        expires = dateutil.parser.parse(headers['expires'])
         request_time = (
-            dateutil.parser.parse(version['headers']['date'])
-            if 'date' in version['headers']
+            dateutil.parser.parse(headers['date'])
+            if 'date' in headers
             else version['capture_time']
         )
         no_cache = (expires - request_time).total_seconds() < 60
 
-    x_cache = version['headers'].get('x-cache', '').lower()
+    x_cache = headers.get('x-cache', '').lower()
     cache_error = 'error' in x_cache or 'n/a' in x_cache
 
     is_short_or_unknown = content_length < 1000
-    content_type = version['media_type'] or version['headers'].get('content-type', '')
+    content_type = version['media_type'] or headers.get('content-type', '')
     is_html = content_type.startswith('text/html')
 
     if server.startswith('awselb/') and is_short_or_unknown and is_html:
@@ -142,8 +143,8 @@ def maybe_bad_capture(version) -> bool:
     # TODO: see if we have any Azure CDN examples?
     # TODO: More general heuristics?
     # else:
-    #     content_type = version['media_type'] or version['headers'].get('content-type', '')
-    #     x_cache = version['headers'].get('x-cache', '').lower()
+    #     content_type = version['media_type'] or headers.get('content-type', '')
+    #     x_cache = headers.get('x-cache', '').lower()
     #     cache_miss = x_cache and not x_cache.startswith('hit')
     #     return content_type.startswith('text/html') and is_short_or_unknown and cache_miss
 
