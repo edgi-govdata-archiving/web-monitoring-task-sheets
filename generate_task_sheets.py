@@ -330,18 +330,22 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                 # return f'!!! type:{type(obj)} !!!'
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 
+            count = len(results)
+            sorted_results = sorted(results, key=lambda r: r[0]['url_key'])
             with (output_path / 'results.json').open('w') as f:
-                count = len(results)
-                sorted_results = sorted(results, key=lambda r: r[0]['url_key'])
                 f.write('[\n')
                 for index, (page, analysis, error) in enumerate(sorted_results):
                     serializable_page = page.copy()
+                    del serializable_page['_list_meta']
+                    del serializable_page['_list_links']
 
                     # FIXME: should not have to clean these up. Should not be
                     # attached to version objects in analyze module.
                     first_version = page['versions'][0].copy()
                     del first_version['response']
                     del first_version['normalized']
+                    del first_version['_list_meta']
+                    del first_version['_list_links']
                     if len(page['versions']) > 0:
                         serializable_page['versions'] = [
                             first_version,
@@ -351,6 +355,8 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                         last_version = page['versions'][-1].copy()
                         del last_version['response']
                         del last_version['normalized']
+                        del last_version['_list_meta']
+                        del last_version['_list_links']
                         serializable_page['versions'].append(last_version)
 
                     json.dump({
