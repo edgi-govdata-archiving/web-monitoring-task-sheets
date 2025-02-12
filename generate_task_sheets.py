@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import dateutil.parser
 from dateutil.tz import tzutc
+from itertools import islice
 import json
 from pathlib import Path
 from retry import retry
@@ -68,7 +69,10 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
             return
 
     # Get version leading into timeframe.
+    # TODO: this has been defunct for years; we should probably clean this up
+    # and remove it.
     if after:
+        raise RuntimeError('THIS LOGIC IS DEFUNCT!')
         yield next(client.get_versions(page_id=page_id,
                                        start_date=None, end_date=after,
                                        sort=['capture_time:desc'],
@@ -86,106 +90,101 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
 #                                     chunk_size=1))
 
 
+def maybe_bad_capture(version) -> bool:
+    """
+    Identify captures that are likely to have been blocked responses (e.g.
+    a rate limit or firewall rule blocked the crawler) or intermittent errors.
+    These don't represent what a regular user should have seen at the time, so
+    we should avoid using them as candidates for comparison.
+    """
+    content_length = version['content_length']
+    if content_length is None:
+        content_length = int(version['headers'].get('content-length', '-1'))
+
+    status = version['status'] or 200
+    if status == 200 and content_length == 0:
+        status = 500
+
+    if status < 400:
+        return False
+
+    server = version['headers'].get('server', '').lower()
+
+    no_cache = False
+    if 'cache-control' in version['headers']:
+        cache_control = version['headers']['cache-control'].lower()
+        if 'no-cache' in cache_control:
+            no_cache = True
+        elif 'max-age=0' in cache_control:
+            no_cache = True
+    if no_cache is False and 'expires' in version['headers']:
+        expires = dateutil.parser.parse(version['headers']['expires'])
+        request_time = (
+            dateutil.parser.parse(version['headers']['date'])
+            if 'date' in version['headers']
+            else version['capture_time']
+        )
+        no_cache = (expires - request_time).total_seconds() < 60
+
+    x_cache = version['headers'].get('x-cache', '').lower()
+    cache_error = 'error' in x_cache or 'n/a' in x_cache
+
+    is_short_or_unknown = content_length < 1000
+    content_type = version['media_type'] or version['headers'].get('content-type', '')
+    is_html = content_type.startswith('text/html')
+
+    if server.startswith('awselb/') and is_short_or_unknown and is_html:
+        return True
+    elif server == 'akamaighost' and is_short_or_unknown and no_cache:
+        return True
+    elif server == 'cloudfront' and cache_error:
+        return True
+    # TODO: see if we have any Azure CDN examples?
+    # TODO: More general heuristics?
+    # else:
+    #     content_type = version['media_type'] or version['headers'].get('content-type', '')
+    #     x_cache = version['headers'].get('x-cache', '').lower()
+    #     cache_miss = x_cache and not x_cache.startswith('hit')
+    #     return content_type.startswith('text/html') and is_short_or_unknown and cache_miss
+
+
 def add_versions_to_page(page, after, before):
     """
     Find all the relevant versions of a page in the given timeframe and attach
     them to the page object as 'versions'.
     """
-    def in_time_range(version):
+    def in_time_range(version) -> bool:
         return version['capture_time'] >= after and version['capture_time'] < before
-
-    def get_status(version):
-        status = version.get('status') or 200
-        if status == 200 and version.get('body_length', -1) == 0:
-            return 500
-        else:
-            return status
 
     all_versions = list_page_versions(page['uuid'], None, before, chunk_size=20)
     versions = []
-    # Start with a dummy version to handle the case where there is no version
-    # in the timeframe.
-    version_after = {'status': -1}  # Dummy version to ensure non-matches
+    questionable_versions = []
     for version in all_versions:
-        in_timeframe = in_time_range(version)
-        if in_timeframe:
-            versions.append(version)
-        elif get_status(version) < 400 or not version_after:
-            # Check `version_after` because there may have been no versions in
-            # the timeframe.
-            versions.append(version)
-            break
+        if in_time_range(version):
+            if maybe_bad_capture(version):
+                questionable_versions.append(version)
+            else:
+                versions.append(version)
         else:
-            # If the version preceeding the timeframe was an error, check
-            # whether it was intermittent and use the one before it if so.
-            final_version = version
-            try:
-                version_before = next(all_versions)
-                # Compare the status codes rather than check whether they are
-                # "OK" because the baseline state may also have been an error.
-                version_status = get_status(version)
-                before_status = get_status(version_before)
-                after_status = get_status(version_after)
-                if before_status == after_status and version_status != before_status:
-                    final_version = version_before
-            except StopIteration:
-                pass
+            if len(versions) == 0:
+                versions.extend(questionable_versions)
+                if len(versions) == 0:
+                    # There are no valid versions in the timeframe to analyze!
+                    break
 
-            versions.append(final_version)
+            # Look back a few more versions and up to N days for a valid
+            # baseline version.
+            baseline = version
+            if maybe_bad_capture(baseline):
+                for candidate in islice(all_versions, 2):
+                    if (baseline['capture_time'] - candidate['capture_time']).days > 30:
+                        break
+                    elif not maybe_bad_capture(candidate):
+                        baseline = candidate
+                        break
+
+            versions.append(baseline)
             break
-
-        version_after = version
-
-    # NOTE: temporarily removing earliest version retrieval. We don't currently
-    # use it, but *may* need to bring it back, so not removing entirely.
-    # if len(versions) >= 2:
-    #     page['earliest'] = get_earliest_version(page['uuid'])
-    # else:
-    #     # Since there aren't at least two versions to compare, this page won't
-    #     # actually get analyzed, so don't bother loading the earliest version.
-    #     # Set an empty value so we can safely check the `earliest` key.
-    #     page['earliest'] = None
-
-    # all_versions = list(list_page_versions(page['uuid'], None, before))
-    # page['earliest'] = all_versions[-1] if len(all_versions) > 0 else None
-    # # versions = list(filter(in_time_range, all_versions))
-    # versions = []
-    # for index, version in enumerate(all_versions):
-    #     in_timeframe = in_time_range(version)
-    #     if in_timeframe:
-    #         versions.append(version)
-    #     elif get_status(version) < 400:
-    #         versions.append(version)
-    #         break
-    #     else:
-    #         # If the version preceeding the timeframe was an error, check
-    #         # whether it was intermittent and use the one before it if so.
-    #         final_version = version
-    #         if len(all_versions) > index + 1:
-    #             # Compare the status codes rather than check whether they are
-    #             # "OK" because the baseline state may also have been an error.
-    #             version_status = get_status(version)
-    #             before_status = get_status(all_versions[index + 1])
-    #             after_status = get_status(all_versions[index - 1])
-    #             if before_status == after_status and version_status != before_status:
-    #                 final_version = all_versions[index + 1]
-
-    #         versions.append(final_version)
-    #         break
-
-
-    # page['earliest'] = get_earliest_version(page['uuid'])
-    # versions = list(list_page_versions(page['uuid'], after, before))
-
-    # If the latest version is an error but the page is not in an error state,
-    # then the error was spurious and should not be part of the analysis.
-    if get_status(page) < 400:
-        error_versions = []
-        while versions and get_status(versions[0]) >= 400:
-            error_versions.append(versions.pop(0))
-
-        if error_versions:
-            page['error_versions'] = error_versions
 
     page['versions'] = versions
     return page
@@ -270,6 +269,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         pages_and_versions = map_parallel(add_versions_to_page, pages, after,
                                           before, cancel=cancel,
                                           parallel=4).output
+        pages_and_versions = (p for p in pages_and_versions if p['versions'])
 
         # Separate progress bar just for data loading from Scanner's DB
         pages_and_versions = tqdm(pages_and_versions, desc='  loading',

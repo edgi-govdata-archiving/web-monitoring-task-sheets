@@ -313,17 +313,9 @@ def hash_changes(diff):
     return hashlib.sha256(diff_bytes).hexdigest()
 
 
-# NOTE: Ideally, we'd have info from DB about when the status changed. The
-# below method could be inaccurate if `a` was a spurious error.
-# See: https://github.com/edgi-govdata-archiving/web-monitoring-db/issues/630
-def page_status_changed(page, a, b):
-    first_ok = a['status'] >= 400
-    page_ok = page.get('status', b['status']) >= 400
-    # Hack to calculate the effective status over this time period because of
-    # lots of known-bad captures from Wayback (so page['status'] is wrong)
-    # FIXME: should probably reproduce the "effective status" algorithm here.
-    if 'globalchange.gov/' in page['url']:
-        page_ok = b['status'] >= 400
+def page_status_changed(page, a, b) -> bool:
+    first_ok = (a['status'] or 600) < 400
+    page_ok = (b['status'] or 600) < 400
     return page_ok != first_ok
 
 
