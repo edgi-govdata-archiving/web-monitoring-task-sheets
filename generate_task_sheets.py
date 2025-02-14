@@ -97,7 +97,7 @@ def maybe_bad_capture(version) -> bool:
     These don't represent what a regular user should have seen at the time, so
     we should avoid using them as candidates for comparison.
     """
-    headers = version['headers'] or {}
+    headers = {k.lower(): v for k, v in (version['headers'] or {}).items()}
     content_length = version['content_length']
     if content_length is None:
         content_length = int(headers.get('content-length', '-1'))
