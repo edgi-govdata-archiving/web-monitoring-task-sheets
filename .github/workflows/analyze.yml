@@ -47,6 +47,10 @@ jobs:
       - name: Install Python Dependencies
         run: pip install -r requirements.txt
 
+      - name: Download NLTK Corpora
+        run: |
+          python -m nltk.downloader stopwords
+
       - name: Analyze!
         run: |
           # FIXME: set up readability running in a background process.
