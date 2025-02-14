@@ -333,7 +333,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
 
             count = len(results)
             sorted_results = sorted(results, key=lambda r: r[0]['url_key'])
-            with (output_path / 'results.json').open('w') as f:
+            with (output_path / '_results.json').open('w', encoding='utf-8') as f:
                 f.write('[\n')
                 for index, (page, analysis, error) in enumerate(sorted_results):
                     serializable_page = page.copy()
