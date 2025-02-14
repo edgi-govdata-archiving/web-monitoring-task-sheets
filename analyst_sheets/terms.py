@@ -31,6 +31,7 @@ KEY_TERMS = (
     'energy independence',
     'enforcement',
     'environmental justice',
+    'environmental quality',
     'equity',
     'ev',
     'federal customer',
