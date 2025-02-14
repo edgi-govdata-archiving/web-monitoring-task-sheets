@@ -4,6 +4,7 @@ node_modules
 .DS_Store
 .env
 scratch.*
+out/
 output/
 output.*
 cache.sqlite
