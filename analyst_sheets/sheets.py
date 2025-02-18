@@ -37,6 +37,7 @@ HEADERS = [
 
     'Home page?',
     'Changed status?',
+    'Effective Status',
     'Status',
     'Readable?',
     'Key Terms',
@@ -106,7 +107,8 @@ def format_row(page, analysis, error, index, name, timestamp):
 
             analysis['root_page'],
             analysis['status_changed'],
-            analysis['status'],
+            analysis['status_b'],
+            version_end['status'],
             analysis['text']['readable'],
             ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
             format(analysis['text']['percent_changed'], '.3f'),
