@@ -341,7 +341,7 @@ def get_version_status(version: dict) -> int:
     redirects, _, _ = get_redirects(version)
     if (
         redirects
-        and urlparse(url).pathname != '/'
+        and urlparse(url).path != '/'
         and surt(urljoin(url, '/')) == surt(redirects[-1])
     ):
         return 404
