@@ -19,12 +19,13 @@ from contextlib import contextmanager
 import concurrent.futures
 import functools
 import hashlib
+from http import HTTPStatus
 import json
 import math
 import os.path
 import re
 import sys
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from web_monitoring_diff import (html_source_diff, html_text_diff,
                                  links_diff_json)
 
@@ -91,6 +92,9 @@ DISALLOWED_EXTENSIONS = frozenset((
     '.xml',
     '.zip'
 ))
+
+STANDARD_STATUS_MESSAGES = set(f'{s.value} {s.phrase.lower()}'
+                               for s in HTTPStatus)
 
 
 def is_fetchable(url):
@@ -313,6 +317,8 @@ def hash_changes(diff):
     return hashlib.sha256(diff_bytes).hexdigest()
 
 
+# This is mostly a port of the DB's "Version#effective_status" routine.
+# TODO: The logic should really be unified with the DB.
 def get_version_status(version: dict) -> int:
     status = version['status'] or (600 if version['network_error'] else 200)
 
@@ -325,7 +331,63 @@ def get_version_status(version: dict) -> int:
         and 'greet.anl.gov/' in version['url']
         and '500' not in version['title']
     ):
-        status = 200
+        return 200
+
+    if status >= 400:
+        return status
+
+    # Redirects from a non-root page to the root are effectively 404s.
+    url = version['url']
+    redirects, _, _ = get_redirects(version)
+    if (
+        redirects
+        and urlparse(url).pathname != '/'
+        and surt(urljoin(url, '/')) == surt(redirects[-1])
+    ):
+        return 404
+
+    # Special case for the EPA "signpost" page, where they redirected hundreds
+    # of climate-related pages to instead of giving them 4xx status codes.
+    if redirects and redirects[-1].endswith('epa.gov/sites/production/files/signpost/cc.html'):
+        return 404
+
+    if version['title']:
+        # Page titles are frequently formulated like "<title> | <site name>" or
+        # "<title> | <site section> | <site name>" (order may also be reversed).
+        # It's helpful to split up the sections and evaluate each independently.
+        for t in re.split(r'\s+(?:-+|\|)\s+', version['title'].lower()):
+            t = t.strip()
+
+            # We frequently see page titles that are just the code and the literal
+            # message from the standard, e.g. "501 Not Implemented".
+            if t in STANDARD_STATUS_MESSAGES:
+                return int(t.split(' ')[0])
+
+            # If the string is just "DDD", "error DDD", or "DDD error" and DDD
+            # starts with a 4 or 5, this is almost certainly just a status code.
+            code_match = re.match(r'^(?:error )?(4\d\d|5\d\d)(?: error)?$', t)
+            if code_match:
+                return int(code_match.group(1))
+
+            # Other more special messages we've seen.
+            if re.search(r'\b(page|file)( was)? not found\b', t):
+                return 404
+            if re.search(r"\bthis page isn['’]t available\b", t):
+                return 404
+            if re.search(r'\baccess denied\b', t):
+                return 403
+            if re.search(r'\brestricted access\b', t):
+                return 403
+            if t == 'error':
+                return 500
+            if 'error processing ssi file' in t:
+                return 500
+            if 'error occurred' in t:
+                return 500
+            if re.search(r'\b(unexpected|server) error\b', t):
+                return 500
+            if re.search(r'\bsite under maintenance\b', t):
+                return 503
 
     return status
 
