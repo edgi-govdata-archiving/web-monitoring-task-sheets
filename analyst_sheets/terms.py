@@ -10,7 +10,7 @@ KEY_TERMS = (
     'certainty',
     'clean energy',
     'climate',
-    'climate',
+    'climate change',
     'compliance',
     'cost-effective',
     'costs',
@@ -18,7 +18,7 @@ KEY_TERMS = (
     'deia',
     'deregulatory',
     'disadvantaged',
-    'diversity'
+    'diversity',
     'droughts',
     'economic certainty',
     'economic impacts',
