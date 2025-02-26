@@ -156,9 +156,9 @@ def get_main_content(html):
             isinstance(c, Comment)
             and ('begin foot' in c.lower() or 'start foot' in c.lower())
         ))
-    main = (soup.main
-            or soup.find(role='main')
-            or soup.find(id='main'))
+    main = (soup.body.main
+            or soup.body.find(role='main')
+            or soup.body.find(id='main'))
     if not main:
         # If only one <article>, it's probably the main content.
         articles = soup.find_all('article')
