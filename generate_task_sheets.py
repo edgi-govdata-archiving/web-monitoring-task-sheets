@@ -56,7 +56,7 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
     if cancel and cancel.is_set():
         return
 
-    versions = client.get_versions(page_id=page_id,
+    versions = client.get_versions(page_id=page_id, different=False,
                                    start_date=after, end_date=before,
                                    # include_change_from_previous=True,
                                    # include_change_from_earliest=True,
