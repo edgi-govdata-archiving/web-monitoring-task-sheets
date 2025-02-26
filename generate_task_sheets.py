@@ -328,6 +328,8 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
             def serializer(obj):
                 if isinstance(obj, datetime):
                     return obj.isoformat()
+                elif isinstance(obj, Exception):
+                    return f'{type(obj).__name__}: {obj}'
                 # return f'!!! type:{type(obj)} !!!'
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 

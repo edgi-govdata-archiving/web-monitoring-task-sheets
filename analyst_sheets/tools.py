@@ -250,9 +250,15 @@ def load_url(url, raise_status=True, timeout=5, method='GET', **request_args):
     return response
 
 
-@retry(tries=2, delay=1)
+# Only retry HTTPErrors here; `load_url` will have already retried others.
+@retry(tries=2, delay=1, exceptions=requests.HTTPError)
 def load_url_readability(url, **request_args):
-    response = load_url(url, raise_status=False, **request_args)
+    try:
+        response = load_url(url, raise_status=False, **request_args)
+    except requests.ReadTimeout:
+        # Sometimes pages are just too big for Readability to handle well.
+        # That's OK; we'll move to our more simplistic fallback.
+        return None
 
     if response.status_code >= 500:
         try:
@@ -270,7 +276,6 @@ def load_url_readability(url, **request_args):
         return response
 
 
-@retry(tries=2, delay=1)
 def parse_html_readability(html, url):
     return load_url_readability('http://localhost:7323/text',
                                 method='POST',
