@@ -341,25 +341,26 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                     serializable_page = page.copy()
                     del serializable_page['_list_meta']
                     del serializable_page['_list_links']
+                    serializable_page['versions'] = []
 
                     # FIXME: should not have to clean these up. Should not be
                     # attached to version objects in analyze module.
-                    first_version = page['versions'][0].copy()
-                    del first_version['response']
-                    del first_version['normalized']
-                    del first_version['_list_meta']
-                    del first_version['_list_links']
                     if len(page['versions']) > 0:
+                        first_version = page['versions'][0].copy()
+                        first_version.pop('response', None)
+                        first_version.pop('normalized', None)
+                        first_version.pop('_list_meta', None)
+                        first_version.pop('_list_links', None)
                         serializable_page['versions'] = [
                             first_version,
                             *[{} for v in page['versions'][1:-1]]
                         ]
                     if len(page['versions']) > 1:
                         last_version = page['versions'][-1].copy()
-                        del last_version['response']
-                        del last_version['normalized']
-                        del last_version['_list_meta']
-                        del last_version['_list_links']
+                        last_version.pop('response', None)
+                        last_version.pop('normalized', None)
+                        last_version.pop('_list_meta', None)
+                        last_version.pop('_list_links', None)
                         serializable_page['versions'].append(last_version)
 
                     json.dump({
