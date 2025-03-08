@@ -11,10 +11,14 @@ from pathlib import Path
 from retry import retry
 import signal
 import sys
+from typing import Iterable, TypeAlias
 from tqdm import tqdm
 import threading
 import traceback
 from web_monitoring import db
+
+
+ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
 
 
 client_storage = threading.local()
@@ -258,6 +262,34 @@ def pretty_print_analysis(page, analysis, output=None):
         print(message, file=sys.stderr)
 
 
+def filter_priority(results: list, threshold: float = 0) -> Iterable:
+    return filter(
+        lambda item: item[1] is None or item[1]['priority'] >= threshold,
+        results
+    )
+
+
+def write_sheets(output_path: Path, results: Iterable[ResultItem]):
+    sheet_groups = group_by_tags(results, ['2l-domain:', '2025-seed-category:', 'news'])
+    for sheet_name, results in sheet_groups.items():
+        # Group results into similar changes and sort those groups.
+        grouped_results = group_by_hash(results)
+        sorted_groups = sorted(
+            grouped_results.values(),
+            key=lambda group: group['priority'],
+            reverse=True
+        )
+
+        # Flatten the groups back into individual results.
+        sorted_rows = (
+            item
+            for result in sorted_groups
+            for item in result['items']
+        )
+
+        write_csv(output_path, sheet_name, sorted_rows)
+
+
 def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, verbose=False, use_readability=True):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
@@ -374,29 +406,14 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                 f.write('\n]')
 
         # Filter out results under the threshold
-        results = filter(lambda item: item[1] is None or item[1]['priority'] >= threshold,
-                         results)
+        results = filter_priority(results, threshold)
 
-        # If we aren't writing to disk, just print the high-priority results.
-        if not output_path:
+        if output_path:
+            write_sheets(output_path, results)
+        else:
             for page, analysis, error in results:
-                if analysis:  # and analysis['priority'] >= 0: # 0.5:
+                if analysis:
                     pretty_print_analysis(page, analysis, tqdm)
-            return
-
-        # Otherwise, prepare spreadsheets and write them to disk!
-        sheet_groups = group_by_tags(results, ['2l-domain:', '2025-seed-category:', 'news'])
-        for sheet_name, results in sheet_groups.items():
-            # Group results into similar changes and sort those groups.
-            grouped_results = group_by_hash(results)
-            sorted_groups = sorted(grouped_results.values(),
-                                   key=lambda group: group['priority'],
-                                   reverse=True)
-            # Flatten the groups back into individual results.
-            sorted_rows = (item
-                           for result in sorted_groups
-                           for item in result['items'])
-            write_csv(output_path, sheet_name, sorted_rows)
 
         # Clear the last line from TQDM, which seems to leave behind the second
         # progress bar. :\
