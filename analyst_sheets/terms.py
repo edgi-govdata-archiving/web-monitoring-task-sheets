@@ -9,6 +9,7 @@ KEY_TERMS = (
     'carbon',
     'certainty',
     'clean energy',
+    'clean heavy duty',
     'climate',
     'climate change',
     'compliance',
@@ -26,6 +27,8 @@ KEY_TERMS = (
     'efficiency',
     'electric vehicle',
     'electric vehicles',
+    'embodied green house gas',
+    'embodied greenhouse gas',
     'emissions',
     'endangered species',
     'energy independence',
@@ -40,6 +43,9 @@ KEY_TERMS = (
     'fracking',
     'global warming',
     'glyphosate',
+    'green house gas'
+    'green house gases'
+    'greenhouse gas',
     'greenhouse gases',
     'guidance',
     'horizontal drilling',
