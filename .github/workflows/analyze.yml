@@ -51,6 +51,22 @@ jobs:
         run: |
           python -m nltk.downloader stopwords
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: readability-server/package-lock.json
+
+      - name: Install readability-server dependencies
+        run: |
+          cd readability-server
+          npm ci
+
+      - name: Run readability-server
+        run: |
+          cd readability-server
+          npm start &
+
       - name: Analyze!
         run: |
           # FIXME: set up readability running in a background process.
@@ -61,8 +77,7 @@ jobs:
             --after '${{ inputs.from || '240' }}' \
             --before '${{ inputs.to || '0' }}' \
             --threshold '${{ inputs.threshold || '0.25' }}' \
-            --pattern '${{ inputs.pattern || env.TEST_PATTERN }}' \
-            --skip-readability
+            --pattern '${{ inputs.pattern || env.TEST_PATTERN }}'
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
