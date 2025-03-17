@@ -69,9 +69,6 @@ jobs:
 
       - name: Analyze!
         run: |
-          # FIXME: set up readability running in a background process.
-          # We probably need to bring the code over from
-          # web-monitoring-changed-terms-analysis
           python generate_task_sheets.py \
             --output out \
             --after '${{ inputs.from || '240' }}' \
