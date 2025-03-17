@@ -5,6 +5,9 @@ env:
 
 on:
   pull_request: {}
+  schedule:
+    # Tuesday at 4pm UTC/9am PT
+    - cron: '0 16 * * 2'
   workflow_dispatch:
     inputs:
       threshold:
@@ -26,9 +29,20 @@ on:
         required: false
         type: string
         default: ''
+      readability:
+        description: 'Use Readability'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   analyze:
+    env:
+      DEFAULT_PATTERN: ${{ github.event_name == 'schedule' && '*' || '*justice.gov/*' }}
+      DEFAULT_THRESHOLD: '0.25'
+      DEFAULT_FROM: ${{ github.event_name == 'schedule' && '268' || '240' }}
+      DEFAULT_TO: '0'
+      USE_READABILITY: ${{ inputs.readability == false && 'false' || 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,17 +66,20 @@ jobs:
           python -m nltk.downloader stopwords
 
       - uses: actions/setup-node@v4
+        if: env.USE_READABILITY == 'true'
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: readability-server/package-lock.json
 
       - name: Install readability-server dependencies
+        if: env.USE_READABILITY == 'true'
         run: |
           cd readability-server
           npm ci
 
       - name: Run readability-server
+        if: env.USE_READABILITY == 'true'
         run: |
           cd readability-server
           npm start &
@@ -70,13 +87,16 @@ jobs:
       - name: Analyze!
         env:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
+          READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
         run: |
+          echo "Readability options: '${READABILITY_OPTIONS}'"
           python generate_task_sheets.py \
             --output out \
-            --after '${{ inputs.from || '240' }}' \
-            --before '${{ inputs.to || '0' }}' \
-            --threshold '${{ inputs.threshold || '0.25' }}' \
-            --pattern '${{ inputs.pattern || env.TEST_PATTERN }}'
+            --after '${{ inputs.from || env.DEFAULT_FROM }}' \
+            --before '${{ inputs.to || env.DEFAULT_TO }}' \
+            --threshold '${{ inputs.threshold || env.DEFAULT_THRESHOLD }}' \
+            --pattern '${{ inputs.pattern || env.DEFAULT_PATTERN }}' \
+            $READABILITY_OPTIONS
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
@@ -84,5 +104,4 @@ jobs:
           name: output
           path: out
           if-no-files-found: error
-          # TODO: what's appropriate retention here?
-          # retention-days: 1
+          retention-days: 7
