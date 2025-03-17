@@ -68,6 +68,8 @@ jobs:
           npm start &
 
       - name: Analyze!
+        env:
+          WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
         run: |
           python generate_task_sheets.py \
             --output out \
