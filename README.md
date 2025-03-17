@@ -22,7 +22,7 @@ The actual analysis routines can be found in [`./analyst_sheets/analyze.py`](./a
 
 ---
 
-In current production usage, we use [Mozilla’s “Readability” tool](https://github.com/mozilla/readability) (what generates the reader view in Firefox) for some parts of the analysis. It has some issues, though, so there is a partially built alternative/fallback for it in `analyst_sheets/normalize.py:get_main_content`. It’s likely too simplistic to work for a lot of potential cases, though.
+In current production usage, we use [Mozilla’s “Readability” tool](https://github.com/mozilla/readability) (what generates the reader view in Firefox) for some parts of the analysis. It has some issues, though, so there is a partially built alternative/fallback for it in `analyst_sheets/normalize.py:get_main_content` (for more info, see [#9](https://github.com/edgi-govdata-archiving/web-monitoring-task-sheets/issues/9)). It’s likely too simplistic to work for a lot of potential cases, though.
 
 - To use Readability, you’ll need Node.js v20 or later installed. Before running `generate_task_sheets.py`, start the Readability server:
 
