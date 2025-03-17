@@ -13,9 +13,9 @@
  */
 'use strict';
 
-const bodyParser = require('body-parser');
-const express = require('express');
-const WorkerPool = require('./worker-pool');
+import bodyParser from 'body-parser';
+import express from 'express';
+import { WorkerPool } from './worker-pool.js';
 
 const serverPort = process.env.PORT || 7323;
 

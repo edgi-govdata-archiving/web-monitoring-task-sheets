@@ -9,9 +9,9 @@
  * exceptions will be caught and re-thrown in the calling process.
  */
 
-const { Worker, parentPort } = require('node:worker_threads');
+import { Worker, parentPort } from 'node:worker_threads';
 
-class SimpleWorker {
+export class SimpleWorker {
   constructor (sourcePath) {
     this._workerSource = sourcePath;
     this._worker = this._createWorker();
@@ -76,7 +76,7 @@ class SimpleWorker {
   }
 }
 
-class WorkerPool {
+export class WorkerPool {
   constructor (sourcePath, size) {
     this._free = [];
     this._waiting = [];
@@ -131,7 +131,3 @@ class WorkerPool {
     });
   }
 }
-
-WorkerPool.SimpleWorker = SimpleWorker;
-
-module.exports = WorkerPool;

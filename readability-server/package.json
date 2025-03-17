@@ -2,6 +2,7 @@
   "name": "readability-server",
   "version": "1.0.0",
   "description": "HTTP server to parse web pages with Mozilla Readability.",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

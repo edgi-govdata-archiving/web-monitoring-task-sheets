@@ -1,7 +1,7 @@
-const { JSDOM } = require('jsdom');
-const { Readability } = require('@mozilla/readability');
-const WorkerPool = require('./worker-pool');
-const Readable = require('./readability-readerable');
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+import { WorkerPool } from './worker-pool.js';
+import isProbablyReaderable from './readability-readerable.cjs';
 
 WorkerPool.implementWorker((html, url, force = false) => {
   // XXX: Mega-selects really slow things down and we'll ultimately strip them
@@ -18,7 +18,7 @@ WorkerPool.implementWorker((html, url, force = false) => {
   // actually worth extracting. (You might have a page that can technically
   // parse, but that doesn't have meaningful content to actually get, and
   // parsing it likely leaves you with gibberish.)
-  if (!force && !Readable.isProbablyReaderable(dom.window.document)) {
+  if (!force && !isProbablyReaderable(dom.window.document)) {
     return null;
   }
 
