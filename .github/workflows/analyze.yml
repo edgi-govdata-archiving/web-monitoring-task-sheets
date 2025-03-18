@@ -7,7 +7,7 @@ on:
   pull_request: {}
   schedule:
     # Tuesday at 4pm UTC/9am PT
-    - cron: '0 16 * * 2'
+    - cron: '40 16 * * 2'
   workflow_dispatch:
     inputs:
       threshold:
