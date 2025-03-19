@@ -37,6 +37,31 @@ In current production usage, we use [Mozilla’s “Readability” tool](https:/
 - To use the in-development fallback, specify the `--skip-readability` option when running `generate_task_sheets.py` instead of starting the Readability server.
 
 
+## Production Usage
+
+A scheduled GitHub Actions workflow in this repo runs the script on regular basis and uploads the results to Google Drive. It relies on two repository secrets to do so:
+
+- `GOOGLE_DRIVE_FOLDER_ID` is the ID of the parent folder to upload results to.
+- `GOOGLE_DRIVE_SERVICE_ACCOUNT` is a base-64 encoded JSON key for a Google Cloud service account to do the uploading. To update this value:
+    1. In the Google Cloud console, find the project that owns the service account you want to use.
+    2. Navigate to “IAM & Admin” → “Service Accounts”
+    3. If you need to add a new service account, click the “create service account” button and follow the steps.
+
+        If creating a service account, make sure it has access to the Google Drive folder you want results uploaded to. Find the folder in Google Drive and share it with the service account’s e-mail like you would any regular Google account.
+
+    4. Find the service account you want to use, open the actions menu for it (right-most cell in the table), and select “manage keys.”
+    5. Click “add key” → “create new key” and select JSON as the format.
+    6. Download the key somewhere.
+    7. Base-64 encode the downloaded file. In a command-line shell:
+
+        ```sh
+        base64 --input path/to/key/file.json
+        ```
+
+    8. In the settings panel for this repo on GitHub, go to “secrets and variables” → “actions”
+    9. Replace the `GOOGLE_DRIVE_SERVICE_ACCOUNT` secret’s value with the base-64 encoded output from step 7.
+
+
 ## Installation
 
 1. Install Python
