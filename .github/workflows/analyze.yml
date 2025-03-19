@@ -34,6 +34,11 @@ on:
         required: false
         type: boolean
         default: true
+      upload_folder:
+        description: 'Save to GDrive with this folder name'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   analyze:
@@ -105,3 +110,38 @@ jobs:
           path: out
           if-no-files-found: error
           retention-days: 7
+
+  upload:
+    if: inputs.upload_folder || github.event_name == 'schedule'
+    needs:
+      - analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: output
+          path: out
+
+      - name: Install Rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rclone
+
+      - name: Configure Rclone
+        run: |
+          echo '${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT }}' | base64 --decode > gdrive-service-account.json
+          (
+            echo '[gdrive-task-sheets]'
+            echo 'type = drive'
+            echo 'scope = drive.file'
+            echo 'service_account_file = ./gdrive-service-account.json'
+            echo 'root_folder_id = ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}'
+          ) > rclone.conf
+
+      - name: Upload
+        run: |
+          FOLDER_NAME='${{ inputs.upload_folder }}'
+          if [ -z "${FOLDER_NAME}" ]; then
+            FOLDER_NAME="Scanner-sheets-$(date +'%Y-%m-%d')"
+          fi
+          rclone copy --config rclone.conf out "gdrive-task-sheets:${FOLDER_NAME}"
