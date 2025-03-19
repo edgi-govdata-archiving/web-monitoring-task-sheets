@@ -154,4 +154,4 @@ jobs:
           webhook: ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
           webhook-type: incoming-webhook
           payload: |
-            text: "<@here> This week’s sheets are now in the `${{ steps.upload.outputs.folder_name }}` folder in Google Drive."
+            text: "<!here> This week’s sheets are now in the `${{ steps.upload.outputs.folder_name }}` folder in Google Drive."
