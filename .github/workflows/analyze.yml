@@ -139,9 +139,19 @@ jobs:
           ) > rclone.conf
 
       - name: Upload
+        id: upload
         run: |
           FOLDER_NAME='${{ inputs.upload_folder }}'
           if [ -z "${FOLDER_NAME}" ]; then
             FOLDER_NAME="Scanner-sheets-$(date +'%Y-%m-%d')"
           fi
           rclone copy --config rclone.conf out "gdrive-task-sheets:${FOLDER_NAME}"
+          echo "folder_name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "@here Weekly sheets are now available in the `${{ steps.upload.outputs.folder_name }}` folder Google Drive."
