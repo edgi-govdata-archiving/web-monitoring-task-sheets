@@ -13,6 +13,7 @@ KEY_TERMS = (
     'climate',
     'climate change',
     'compliance',
+    'community',
     'cost effective',
     'costs',
     'dei',
