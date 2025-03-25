@@ -143,8 +143,15 @@ def maybe_bad_capture(version) -> bool:
         return True
     elif server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
-    elif server == 'cloudfront' and cache_error:
-        return True
+    elif server == 'cloudfront':
+        # TODO: Keeping these branches separate b/c the challenge response is
+        # *definitely* a bad capture, while the cache_error is only probably.
+        # In the future, we may refactor this function to return a float
+        # indicating probable badness instead of a boolean.
+        if headers.get('x-amzn-waf-action', '').lower() == 'challenge':
+            return True
+        elif cache_error:
+            return True
     # TODO: see if we have any Azure CDN examples?
     # TODO: More general heuristics?
     # else:
