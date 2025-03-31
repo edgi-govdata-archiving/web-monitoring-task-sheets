@@ -389,6 +389,11 @@ def get_version_status(version: dict) -> int:
             if re.search(r'\bsite under maintenance\b', t):
                 return 503
 
+    # Oracle APEX includes this header on errors. It's ambiguous about the
+    # kind of error, so only check this if the other heuristics didn't work.
+    if version['headers'] and 'level=error' in version['headers'].get('apex-debug-id', '').lower():
+        return 500
+
     return status
 
 
