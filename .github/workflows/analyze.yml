@@ -157,7 +157,7 @@ jobs:
           echo "folder_name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Slack
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@v2.1.0
         with:
           webhook: ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
           webhook-type: incoming-webhook
