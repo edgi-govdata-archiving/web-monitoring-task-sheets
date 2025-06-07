@@ -108,7 +108,7 @@ jobs:
             --before '${{ inputs.to || env.DEFAULT_TO }}' \
             --threshold '${{ inputs.threshold || env.DEFAULT_THRESHOLD }}' \
             --pattern '${{ inputs.pattern || env.DEFAULT_PATTERN }}' \
-            $TAG_OPTIONS \
+            ${{ env.TAG_OPTIONS }} \
             $READABILITY_OPTIONS
 
       - name: Upload Results
