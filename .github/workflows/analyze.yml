@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: ''
+      tag:
+        description: 'Tag'
+        required: false
+        type: string
+        default: ''
       from:
         description: 'From Time'
         required: false
@@ -93,6 +98,7 @@ jobs:
         env:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
+          TAG_OPTIONS: ${{ inputs.tag && format('--tag ''{0}''', inputs.tag) || '' }}
         run: |
           echo "Readability options: '${READABILITY_OPTIONS}'"
           python generate_task_sheets.py \
@@ -101,6 +107,7 @@ jobs:
             --before '${{ inputs.to || env.DEFAULT_TO }}' \
             --threshold '${{ inputs.threshold || env.DEFAULT_THRESHOLD }}' \
             --pattern '${{ inputs.pattern || env.DEFAULT_PATTERN }}' \
+            $TAG_OPTIONS \
             $READABILITY_OPTIONS
 
       - name: Upload Results
