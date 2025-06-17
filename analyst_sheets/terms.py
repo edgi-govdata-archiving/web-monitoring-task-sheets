@@ -209,7 +209,7 @@ KEY_TERMS = (
     'calidad del agua',
     'calidad acuática',
     'incendios forestales',
-    'incendios silvestres'
+    'incendios silvestres',
 )
 
 # Ensure key terms are normalized in the same way as our text will be.
