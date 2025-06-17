@@ -1,3 +1,5 @@
+from .normalize import normalize_text
+
 KEY_TERMS = (
     'adaptation',
     'agency mission',
@@ -86,5 +88,8 @@ KEY_TERMS = (
     'water quality',
     'wildfires',
 )
+
+# Ensure key terms are normalized in the same way as our text will be.
+KEY_TERMS = list(set(normalize_text(term) for term in KEY_TERMS))
 
 KEY_TERM_GRAMS = max((len(term.split(' ')) for term in KEY_TERMS))
