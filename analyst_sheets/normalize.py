@@ -11,6 +11,7 @@ import html5_parser
 import re
 import soupsieve
 from surt import surt
+import unicodedata
 from urllib.parse import parse_qs, urlencode, urljoin
 
 
@@ -18,10 +19,21 @@ INFIX_PUNCTUATION = re.compile(r'''['‘’]''')
 NON_WORDS = re.compile(r'\W+')
 
 
+def remove_accents(text: str) -> str:
+    """
+    Remove all the accent characters in a unicode string.
+    """
+    clean = ''.join(
+        c for c in unicodedata.normalize('NFD', text)
+        if not unicodedata.combining(c)
+    )
+    return unicodedata.normalize('NFKC', clean)
+
+
 def normalize_text(text):
     """
     Normalize a chunk of text from an HTML document by casefolding and removing
-    punctuation.
+    punctuation and accents/combining marks.
     """
     # Remove punctuation between words
     return NON_WORDS.sub(
@@ -30,7 +42,7 @@ def normalize_text(text):
         INFIX_PUNCTUATION.sub(
             '',
             # Lower-case and normalize unicode characters
-            text.casefold()
+            remove_accents(text).casefold()
         )
     )
 
