@@ -87,6 +87,11 @@ KEY_TERMS = (
     'underserved',
     'water quality',
     'wildfires',
+
+    # Español
+    'clima',
+    'climática',
+    'climático',
 )
 
 # Ensure key terms are normalized in the same way as our text will be.
