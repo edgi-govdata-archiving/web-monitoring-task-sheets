@@ -155,7 +155,7 @@ KEY_TERMS = (
     'combustibles fósiles',
     'fracking',
     'calentamiento global',
-    'glifosato','
+    'glifosato',
     'gas de efecto invernadero',
     'gases de efecto invernadero',
     'gas invernadero',
