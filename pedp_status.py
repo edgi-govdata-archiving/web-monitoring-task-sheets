@@ -41,13 +41,11 @@ for index, page in enumerate(progress):
     latest_valid['response'] = load_url(latest_valid['body_url'], timeout=20, headers={'accept': '*/*'})
     effective_status = get_version_status(latest_valid)
 
-    scanner_url = f'https://monitoring.envirodatagov.org/page/{page["uuid"]}'
     print('\t'.join([
         page['url'],
-        latest['status'],
+        str(latest['status']),
         str(effective_status),
         latest['capture_time'],
         latest_valid and latest_valid['capture_time'] or '',
-        scanner_url
+        f'https://monitoring.envirodatagov.org/page/{page["uuid"]}'
     ]))
-    print(f'{page["url"]}\t{latest["status"]}\t{effective_status}\t{scanner_url}')
