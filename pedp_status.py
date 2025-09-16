@@ -45,7 +45,7 @@ for index, page in enumerate(progress):
         page['url'],
         str(latest['status']),
         str(effective_status),
-        latest['capture_time'],
-        latest_valid and latest_valid['capture_time'] or '',
+        latest['capture_time'].isoformat(),
+        latest_valid and latest_valid['capture_time'].isoformat() or '',
         f'https://monitoring.envirodatagov.org/page/{page["uuid"]}'
     ]))
