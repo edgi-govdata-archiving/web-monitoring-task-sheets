@@ -33,11 +33,11 @@ for index, page in enumerate(progress):
 
     page = add_versions_to_page(page, after=after, before=before)
     latest = next(list_page_versions(page['uuid'], None, before, chunk_size=1))
-    if not len(page['versions']) and not latest:
+    latest_valid = page['versions'][0] if len(page['versions']) else latest
+    if not latest:
         progress.write(f'!! No good versions for {page["uuid"]} (skipping)', file=stderr)
         continue
 
-    latest_valid = page['versions'][0]
     latest_valid['response'] = load_url(latest_valid['body_url'], timeout=20, headers={'accept': '*/*'})
     effective_status = get_version_status(latest_valid)
 
