@@ -58,7 +58,7 @@ jobs:
           retention-days: 65
 
   email:
-    if: ${{ inputs.email_to || vars.email_status_checks_to }}
+    if: ${{ (inputs.email_to || vars.email_status_checks_to) && inputs.email_to != '-' }}
     needs:
       - analyze
     runs-on: ubuntu-latest
@@ -68,4 +68,14 @@ jobs:
           name: output
           path: out
 
-      # TODO: send e-mail
+      - uses: dawidd6/action-send-mail@v6
+        with:
+          connection_url: ${{secrets.EMAIL_CONNECTION}}
+          secure: true
+          to: '${{ inputs.email_to || vars.email_status_checks_to }}'
+          from: EDGI Web Monitoring
+          subject: EDGI WM Status Code Check Result
+          body: |
+            Hello! Here is the result.
+          # convert_markdown: true
+          attachments: 'out/*'
