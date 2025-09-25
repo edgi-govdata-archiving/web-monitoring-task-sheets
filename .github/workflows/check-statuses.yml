@@ -1,0 +1,69 @@
+name: Check PEDP page statuses
+
+on:
+  schedule:
+    # 10am ET on the first of every month.
+    - cron: '0 10 1 * *'
+  workflow_dispatch:
+    inputs:
+      email_to:
+        description: 'E-mail results to (instead of standard addresses):'
+        type: string
+        required: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ pkg-config libxml2-dev libxslt-dev libz-dev
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download NLTK Corpora
+        run: |
+          python -m nltk.downloader stopwords
+
+      - name: Build status CSV
+        id: build-csv
+        env:
+          WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
+        run: |
+          mkdir out
+          timestamp="$(date +'%Y-%m-%d')"
+          filename="out/${timestamp}-pedp-status-check.csv"
+          echo "filename=${filename}" >> "$GITHUB_OUTPUT"
+
+          python generate_pedp_status.py > "${filename}"
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v5
+        with:
+          name: output
+          path: out
+          if-no-files-found: error
+          retention-days: 65
+
+  email:
+    if: ${{ inputs.email_to || vars.email_status_checks_to }}
+    needs:
+      - analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: output
+          path: out
+
+      # TODO: send e-mail
