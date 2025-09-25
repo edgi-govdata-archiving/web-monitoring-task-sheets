@@ -50,7 +50,7 @@ jobs:
           python generate_pedp_status.py > "${filename}"
 
       - name: Upload Results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: output
           path: out
