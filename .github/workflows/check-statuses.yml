@@ -1,6 +1,8 @@
 name: Check PEDP page statuses
 
 on:
+  # FIXME: remove the `pull_request` trigger before merging!
+  pull_request: {}
   schedule:
     # 10am ET on the first of every month.
     - cron: '0 10 1 * *'
