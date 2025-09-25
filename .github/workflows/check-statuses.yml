@@ -70,11 +70,12 @@ jobs:
 
       - uses: dawidd6/action-send-mail@v6
         with:
-          connection_url: ${{secrets.EMAIL_CONNECTION}}
+          connection_url: '${{ secrets.EMAIL_CONNECTION }}'
           secure: true
+          nodemailerdebug: true
           to: '${{ inputs.email_to || vars.email_status_checks_to }}'
-          from: EDGI Web Monitoring
-          subject: EDGI WM Status Code Check Result
+          from: 'EDGI Web Monitoring <website.monitoring@envirodatagov.org>'
+          subject: 'EDGI WM Status Code Check Result'
           body: |
             Hello! Here is the result.
           # convert_markdown: true
