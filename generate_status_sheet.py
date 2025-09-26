@@ -44,11 +44,7 @@ def main(url: str = '*', tags: list[str] = []) -> None:
         'Scanner URL'
     ])
 
-    for index, page in enumerate(progress):
-        # if index > 0 and index % 25 == 0:
-        #     progress.write('Chilling for a moment...', file=stderr)
-        #     sleep(10)
-
+    for page in progress:
         page = add_versions_to_page(page, after=after, before=before)
         latest = next(list_page_versions(page['uuid'], None, before, chunk_size=1))
         latest_valid = page['versions'][0] if len(page['versions']) else latest
@@ -79,8 +75,8 @@ def main(url: str = '*', tags: list[str] = []) -> None:
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Check status codes of monitored pages.')
-    parser.add_argument('--url', help='Only check pages with URLs matching this pattern.')
+    parser.add_argument('--url', default='*', help='Only check pages with URLs matching this pattern.')
     parser.add_argument('--tag', action='append', help='Only check pages with this tag (repeat for multiple tags).')
     options = parser.parse_args()
 
-    main(url=(options.url or '*'), tags=options.tag)
+    main(url=options.url, tags=options.tag)
