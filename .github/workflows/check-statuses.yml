@@ -47,7 +47,7 @@ jobs:
           filename="out/${timestamp}-pedp-status-check.csv"
           echo "filename=${filename}" >> "$GITHUB_OUTPUT"
 
-          python generate_pedp_status.py > "${filename}"
+          python generate_status_sheet.py --url '*.nrel.gov/d*' --tag 'PEDP' > "${filename}"
 
       - name: Upload Results
         uses: actions/upload-artifact@v4
