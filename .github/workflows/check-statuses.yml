@@ -74,7 +74,7 @@ jobs:
           to: '${{ inputs.email_to || vars.email_status_checks_to }}'
           from: 'EDGI Web Monitoring <website.monitoring@envirodatagov.org>'
           subject: 'EDGI WM Status Code Check Result'
-          body: |
+          html_body: |
             Hello from Web Monitoring Bot!
 
             Attached is your monthly report of HTTP status checks for datasets
