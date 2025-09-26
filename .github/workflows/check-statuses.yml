@@ -71,7 +71,7 @@ jobs:
       - uses: dawidd6/action-send-mail@v6
         with:
           connection_url: '${{ secrets.EMAIL_CONNECTION }}'
-          secure: true
+          # secure: true
           nodemailerdebug: true
           to: '${{ inputs.email_to || vars.email_status_checks_to }}'
           from: 'EDGI Web Monitoring <website.monitoring@envirodatagov.org>'
