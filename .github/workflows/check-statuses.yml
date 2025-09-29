@@ -7,13 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       email_to:
-        description: 'E-mail results to (instead of standard addresses):'
+        description: 'E-mail results to (comma-separated):'
         type: string
         required: false
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    env:
+      EMAIL_TO: ${{ github.event_name == 'schedule' && vars.email_status_checks_to || (inputs.email_to != '-' && inputs.email_to) }}
+    outputs:
+      email_to: ${{ env.EMAIL_TO }}
     steps:
       - uses: actions/checkout@v5
 
@@ -56,7 +60,7 @@ jobs:
           retention-days: 65
 
   email:
-    if: ${{ (inputs.email_to || vars.email_status_checks_to) && inputs.email_to != '-' }}
+    if: ${{ needs.analyze.outputs.email_to }}
     needs:
       - analyze
     runs-on: ubuntu-latest
@@ -69,7 +73,7 @@ jobs:
       - uses: dawidd6/action-send-mail@v6
         with:
           connection_url: '${{ secrets.EMAIL_CONNECTION }}'
-          to: '${{ inputs.email_to || vars.email_status_checks_to }}'
+          to: '${{ needs.analyze.outputs.email_to }}'
           from: 'EDGI Web Monitoring <website.monitoring@envirodatagov.org>'
           subject: 'EDGI WM Status Code Check Result'
           html_body: |
