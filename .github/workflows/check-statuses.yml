@@ -9,7 +9,7 @@ on:
       url_pattern:
         description: 'Page URL Pattern:'
         type: string
-        required: false
+        default: '*'
       tags:
         description: 'Page tags (comma-separated):'
         type: string
@@ -58,7 +58,7 @@ jobs:
           echo "filename=${filename}" >> "$GITHUB_OUTPUT"
 
           python generate_status_sheet.py \
-            --url '${{ github.event_name != 'schedule' && inputs.url_pattern || '' }}' \
+            --url '${{ github.event_name == 'schedule' && '*' || inputs.url_pattern || '' }}' \
             --tag '${{ github.event_name == 'schedule' && 'PEDP' || inputs.tags }}' \
             > "${filename}"
 
