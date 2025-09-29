@@ -447,7 +447,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Count term changes in monitored pages.')
     parser.add_argument('--output', type=Path, help='Output CSV files in this directory')
     parser.add_argument('--pattern', help='Only analyze pages with URLs matching this pattern.')
-    parser.add_argument('--tag', action='append', help='Only anlyze pages with this tag (repeat for multiple tags).')
+    parser.add_argument('--tag', action='append', help='Only analyze pages with this tag (repeat for multiple tags).')
     parser.add_argument('--after', type=timeframe_date, help='Only include versions after this date. May also be a number of hours before the current time.')
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
     parser.add_argument('--threshold', type=float, default=0.5, help='Minimum priority value to include in output.')

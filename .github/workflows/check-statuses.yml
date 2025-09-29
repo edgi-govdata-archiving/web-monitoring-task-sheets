@@ -1,0 +1,123 @@
+name: Check PEDP page statuses
+
+on:
+  schedule:
+    # 10am ET on the first of every month.
+    - cron: '0 10 1 * *'
+  workflow_dispatch:
+    inputs:
+      url_pattern:
+        description: 'Page URL Pattern:'
+        type: string
+        required: false
+      tags:
+        description: 'Page tags (comma-separated):'
+        type: string
+        required: false
+      email_to:
+        description: 'E-mail results to (comma-separated):'
+        type: string
+        required: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      EMAIL_TO: ${{ github.event_name == 'schedule' && vars.email_status_checks_to || (inputs.email_to != '-' && inputs.email_to) }}
+    outputs:
+      email_to: ${{ env.EMAIL_TO }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ pkg-config libxml2-dev libxslt-dev libz-dev
+
+      - name: Install Python Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download NLTK Corpora
+        run: |
+          python -m nltk.downloader stopwords
+
+      - name: Build status CSV
+        id: build-csv
+        env:
+          WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
+        run: |
+          mkdir out
+          timestamp="$(date +'%Y-%m-%d')"
+          filename="out/${timestamp}-pedp-status-check.csv"
+          echo "filename=${filename}" >> "$GITHUB_OUTPUT"
+
+          python generate_status_sheet.py \
+            --url '${{ github.event_name != 'schedule' && inputs.url_pattern || '' }}' \
+            --tag '${{ github.event_name == 'schedule' && 'PEDP' || inputs.tags }}' \
+            > "${filename}"
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: output
+          path: out
+          if-no-files-found: error
+          retention-days: 65
+
+  email:
+    if: ${{ needs.analyze.outputs.email_to }}
+    needs:
+      - analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: output
+          path: out
+
+      - uses: dawidd6/action-send-mail@v6
+        with:
+          connection_url: '${{ secrets.EMAIL_CONNECTION }}'
+          to: '${{ needs.analyze.outputs.email_to }}'
+          from: 'EDGI Web Monitoring <website.monitoring@envirodatagov.org>'
+          subject: 'EDGI WM Status Code Check Result'
+          html_body: |
+            Hello from Web Monitoring Bot!
+
+            Attached is your monthly report of HTTP status checks for datasets
+            and pages tagged for PEDP.
+
+            ---
+
+            **How to read the attached spreadsheet:**
+
+            The attached CSV lists all the pages EDGI is monitoring that are
+            tagged for PEDP and shows their most recent HTTP status codes. If a
+            site was totally offline (it timed out after several minutes, its
+            domain name was removed, etc.), it will have a status of "(offline)"
+            instead of the typical 3-digit status code.
+
+            The columns are:
+            1. **"URL":** The URL being monitored.
+            2. **"Status":** The actual HTTP status code it returned the last
+                time it was checked.
+            3. **"Effective Status":** What we believe the current status code is
+                in practice. This tries to account for things like CDNs and
+                firewalls blocking our crawlers, intermittent connection
+                problems, and pages that return 2xx (OK) status codes but that
+                are actually showing an error. (Let us know if this seems wrong
+                a lot!)
+            4. **"Capture Time":** The most recent time we checked this URL.
+            5. **"Latest Valid Capture Time":** The most recent time we checked
+                this URL and believe we got a valid response (i.e. we don't
+                think the crawler was blocked).
+            6. **"Scanner URL":** Follow this URL to see more details and a
+                monitoring history of this page.
+          convert_markdown: true
+          attachments: 'out/*'
