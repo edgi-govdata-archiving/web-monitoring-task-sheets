@@ -6,6 +6,14 @@ on:
     - cron: '0 10 1 * *'
   workflow_dispatch:
     inputs:
+      url_pattern:
+        description: 'Page URL Pattern:'
+        type: string
+        required: false
+      tags:
+        description: 'Page tags (comma-separated):'
+        type: string
+        required: false
       email_to:
         description: 'E-mail results to (comma-separated):'
         type: string
@@ -49,7 +57,10 @@ jobs:
           filename="out/${timestamp}-pedp-status-check.csv"
           echo "filename=${filename}" >> "$GITHUB_OUTPUT"
 
-          python generate_status_sheet.py --tag 'PEDP' > "${filename}"
+          python generate_status_sheet.py \
+            --url '${{ github.event_name != 'schedule' && inputs.url_pattern || '' }}' \
+            --tag '${{ github.event_name == 'schedule' && 'PEDP' || inputs.tags }}' \
+            > "${filename}"
 
       - name: Upload Results
         uses: actions/upload-artifact@v4

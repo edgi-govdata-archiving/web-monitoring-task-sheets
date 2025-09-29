@@ -79,4 +79,10 @@ if __name__ == '__main__':
     parser.add_argument('--tag', action='append', help='Only check pages with this tag (repeat for multiple tags).')
     options = parser.parse_args()
 
-    main(url=options.url, tags=options.tag)
+    tags = [
+        tag
+        for cli_tag in options.tag
+        for tag in cli_tag.split(',')
+    ]
+
+    main(url=options.url, tags=tags)
