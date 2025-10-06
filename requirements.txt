@@ -4,7 +4,7 @@ requests
 requests-cache
 retry
 surt
-web-monitoring-diff ==0.1.6 --no-binary lxml
+web-monitoring-diff ==0.1.7 --no-binary lxml
 git+https://github.com/edgi-govdata-archiving/web-monitoring-processing@main
 # These are dependencies of web-monitoring-processing, but we need to install
 # them explicitly because of the --no-binary argument, which is specific to Pip
