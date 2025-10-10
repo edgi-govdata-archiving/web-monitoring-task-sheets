@@ -25,7 +25,7 @@ import math
 import os.path
 import re
 import sys
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlsplit
 from web_monitoring_diff import (html_source_diff, html_text_diff,
                                  links_diff_json)
 
@@ -102,7 +102,7 @@ def is_fetchable(url):
 
 
 def is_allowed_extension(url):
-    extension = os.path.splitext(urlparse(url).path)[1]
+    extension = os.path.splitext(urlsplit(url).path)[1]
     return not extension or extension not in DISALLOWED_EXTENSIONS
 
 
@@ -341,7 +341,7 @@ def get_version_status(version: dict) -> int:
     redirects, _, _ = get_redirects(version)
     if (
         redirects
-        and urlparse(url).path != '/'
+        and urlsplit(url).path != '/'
         and surt(urljoin(url, '/')) == surt(redirects[-1])
     ):
         return 404
@@ -526,7 +526,7 @@ ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
 
 
 def is_home_page(page):
-    url_path = urlparse(page['url']).path
+    url_path = urlsplit(page['url']).path
     return True if ROOT_PAGE_PATTERN.match(url_path) else False
 
 
