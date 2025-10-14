@@ -351,6 +351,15 @@ def get_version_status(version: dict) -> int:
     if redirects and redirects[-1].endswith('epa.gov/sites/production/files/signpost/cc.html'):
         return 404
 
+    # Special case for climate.nasa.gov getting moved with bad redirects for
+    # all the sub-pages (they all redirected to the new home page).
+    if (
+        redirects
+        and re.match(r'^https?://climate.nasa.gov/.+$', url, re.IGNORECASE)
+        and redirects[-1].endswith('://science.nasa.gov/climate-change/')
+    ):
+        return 404
+
     if version['title']:
         # Page titles are frequently formulated like "<title> | <site name>" or
         # "<title> | <site section> | <site name>" (order may also be reversed).
