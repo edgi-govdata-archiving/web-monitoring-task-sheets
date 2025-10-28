@@ -162,6 +162,50 @@ def maybe_bad_capture(version) -> bool:
     return False
 
 
+def status_error_class(status: int | None) -> int:
+    status_class = int((status or 600) / 100)
+    return status_class if status_class >= 4 else 0
+
+
+def trim_version_range(versions: list[dict], start_only: bool = False) -> list[dict]:
+    """
+    Trim same-ish versions from the beginning and end of a list of versions.
+    Versions are considered the same if they have the same body hash or if they
+    are HTTP errors of the same class (4xx, 5xx).
+
+    The goal here is to make sure we are analyzing and presenting to users the
+    narrowest time window we can for relevant changes.
+
+    Ideally we'd do a more detailed pass after this that looks at the parsed,
+    normalized content and discards stuff we don't care about like most
+    ``<meta>`` or ``<script>`` tags, ``data-*`` attributes, etc., but this gets
+    us pretty far.
+    """
+    if len(versions) < 3:
+        return versions
+
+    start_index = 0
+    start_hash = versions[0].get('body_hash')
+    start_status = status_error_class(versions[0].get('status'))
+    for index, version in enumerate(versions):
+        if start_status:
+            if start_status != status_error_class(version.get('status')):
+                break
+        else:
+            if start_hash != version.get('body_hash'):
+                break
+        start_index = index
+
+    result = versions[start_index:]
+    if start_only:
+        return result
+
+    return list(reversed(trim_version_range(
+        list(reversed(result)),
+        start_only=True
+    )))
+
+
 def add_versions_to_page(page, after, before):
     """
     Find all the relevant versions of a page in the given timeframe and attach
@@ -200,7 +244,7 @@ def add_versions_to_page(page, after, before):
             versions.append(baseline)
             break
 
-    page['versions'] = versions
+    page['versions'] = trim_version_range(versions)
     return page
 
 
