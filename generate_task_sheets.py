@@ -278,7 +278,7 @@ def filter_priority(results: list, threshold: float = 0) -> Iterable:
 
 
 def write_sheets(output_path: Path, results: Iterable[ResultItem]):
-    sheet_groups = group_by_tags(results, ['2l-domain:', 'category:', 'news'])
+    sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
     for sheet_name, results in sheet_groups.items():
         # Group results into similar changes and sort those groups.
         grouped_results = group_by_hash(results)
