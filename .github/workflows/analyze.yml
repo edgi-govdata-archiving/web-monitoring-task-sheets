@@ -75,7 +75,7 @@ jobs:
         run: |
           python -m nltk.downloader stopwords
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         if: env.USE_READABILITY == 'true'
         with:
           node-version: '22'
