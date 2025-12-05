@@ -152,6 +152,9 @@ def maybe_bad_capture(version) -> bool:
             return True
         elif cache_error:
             return True
+    elif server == 'cloudflare':
+        if headers.get('cf-mitigated', '').lower() == 'challenge':
+            return True
     # TODO: see if we have any Azure CDN examples?
     # TODO: More general heuristics?
     # else:
