@@ -150,6 +150,8 @@ app.post('/all', readBodyMiddleware, readabilityMiddleware, function (request, r
   response.json(request.parsedPage);
 });
 
-app.listen(serverPort, function () {
+app.listen(serverPort, function (error) {
+  if (error) throw error;
+
   console.log(`Listening on port ${serverPort}`);
 });
