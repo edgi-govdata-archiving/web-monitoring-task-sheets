@@ -52,7 +52,7 @@ jobs:
       DEFAULT_THRESHOLD: '0.25'
       DEFAULT_FROM: ${{ github.event_name == 'schedule' && '268' || '240' }}
       DEFAULT_TO: '0'
-      USE_READABILITY: ${{ inputs.readability == false && 'false' || 'true' }}
+      USE_READABILITY: ${{ (inputs.readability || toJSON(inputs.readability) == 'null') && 'true' || 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
