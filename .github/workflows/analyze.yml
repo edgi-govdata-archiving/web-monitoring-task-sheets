@@ -67,6 +67,8 @@ jobs:
           echo 'false == 1? ${{ false == 1 && 'yep' || 'nope' }}'
           echo 'true == 0? ${{ true == 0 && 'yep' || 'nope' }}'
           echo 'true == 1? ${{ true == 1 && 'yep' || 'nope' }}'
+          echo ''
+          echo '(inputs.readability || toJSON(inputs.readability) == 'null')? ${{ (inputs.readability || toJSON(inputs.readability) == 'null') && 'true' || 'false' }}'
 
       - uses: actions/checkout@v6
 
