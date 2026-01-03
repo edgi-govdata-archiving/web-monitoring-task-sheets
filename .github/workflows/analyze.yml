@@ -60,6 +60,13 @@ jobs:
           echo 'inputs: ${{ toJSON(inputs) }}'
           echo 'inputs.readability: ${{ toJSON(inputs.readability) }}'
           echo 'null == false? ${{ null == false && 'yep' || 'nope' }}'
+          echo 'Type casting!'
+          echo 'null == 0? ${{ null == 0 && 'yep' || 'nope' }}'
+          echo 'null == 1? ${{ null == 1 && 'yep' || 'nope' }}'
+          echo 'false == 0? ${{ false == 0 && 'yep' || 'nope' }}'
+          echo 'false == 1? ${{ false == 1 && 'yep' || 'nope' }}'
+          echo 'true == 0? ${{ true == 0 && 'yep' || 'nope' }}'
+          echo 'true == 1? ${{ true == 1 && 'yep' || 'nope' }}'
 
       - uses: actions/checkout@v6
 
