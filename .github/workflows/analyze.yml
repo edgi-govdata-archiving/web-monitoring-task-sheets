@@ -57,7 +57,9 @@ jobs:
     steps:
       - name: Log inputs
         run: |
-          echo '${{ toJSON(inputs) }}'
+          echo 'inputs: ${{ toJSON(inputs) }}'
+          echo 'inputs.readability: ${{ toJSON(inputs.readability) }}'
+          echo 'null == false? ${{ null == false && 'yep' || 'nope' }}'
 
       - uses: actions/checkout@v6
 
