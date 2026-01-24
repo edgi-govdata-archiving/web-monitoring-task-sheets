@@ -104,6 +104,10 @@ jobs:
             instead of the typical 3-digit status code.
 
             The columns are:
+            1. **"Agencies":** The agencies that maintain this web page. May be
+                more than one (comma-separated list).
+            2. **"Offices":** Specific offices within the agencies that maintain
+                this web page. May be more than one (comma-separated list).
             1. **"URL":** The URL being monitored.
             2. **"Status":** The actual HTTP status code it returned the last
                 time it was checked.
