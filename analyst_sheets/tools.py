@@ -233,12 +233,27 @@ def net_change(deletions, additions):
     return net_count
 
 
+client_storage = threading.local()
+
+
+def get_thread_db_client():
+    if not hasattr(client_storage, 'db_client'):
+        client_storage.db_client = db.Client.from_env()
+    return client_storage.db_client
+
+
+def get_thread_http_client():
+    if not hasattr(client_storage, 'http_client'):
+        client_storage.http_client = requests.Session()
+    return client_storage.http_client
+
+
 @retry(tries=3, delay=1)
 def load_url(url, raise_status=True, timeout=5, method='GET', **request_args):
     if url.startswith('https://api.monitoring.envirodatagov.org'):
-        response = db.Client.from_env().request(method, url, **request_args)
+        response = get_thread_db_client().request(method, url, **request_args)
     else:
-        response = requests.request(method, url, timeout=timeout, **request_args)
+        response = get_thread_http_client().request(method, url, timeout=timeout, **request_args)
     if raise_status and not response.ok:
         print(f'Raising on {url}')
         response.raise_for_status()
