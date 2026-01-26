@@ -1,6 +1,13 @@
 from analyst_sheets import analyze
 from analyst_sheets.sheets import write_csv
-from analyst_sheets.tools import generate_on_thread, map_parallel, QuitSignal, ActivityMonitor, tap
+from analyst_sheets.tools import (
+    generate_on_thread,
+    map_parallel,
+    QuitSignal,
+    ActivityMonitor,
+    get_thread_db_client,
+    tap
+)
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import dateutil.parser
@@ -22,15 +29,8 @@ from web_monitoring import db
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
 
 
-client_storage = threading.local()
-def get_thread_client():
-    if not hasattr(client_storage, 'client'):
-        client_storage.client = db.Client.from_env()
-    return client_storage.client
-
-
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
-    client = client or get_thread_client()
+    client = client or get_thread_db_client()
 
     pages = client.get_pages(url=url_pattern,
                              tags=tags,
@@ -56,7 +56,7 @@ def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=No
 
 def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
                        client=None):
-    client = client or get_thread_client()
+    client = client or get_thread_db_client()
 
     if cancel and cancel.is_set():
         return
@@ -85,7 +85,7 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
 
 
 # def get_earliest_version(page_id, cancel=None, client=None):
-#     client = client or get_thread_client()
+#     client = client or get_thread_db_client()
 
 #     if cancel and cancel.is_set():
 #         return
