@@ -84,17 +84,6 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
                                        chunk_size=1))
 
 
-# def get_earliest_version(page_id, cancel=None, client=None):
-#     client = client or get_thread_db_client()
-
-#     if cancel and cancel.is_set():
-#         return
-
-#     return next(client.get_versions(page_id=page_id,
-#                                     sort=['capture_time:asc'],
-#                                     chunk_size=1))
-
-
 def maybe_bad_capture(version) -> bool:
     """
     Identify captures that are likely to have been blocked responses (e.g.
