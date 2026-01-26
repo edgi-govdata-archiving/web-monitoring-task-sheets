@@ -233,19 +233,19 @@ def net_change(deletions, additions):
     return net_count
 
 
-client_storage = threading.local()
+thread_clients = threading.local()
 
 
 def get_thread_db_client():
-    if not hasattr(client_storage, 'db_client'):
-        client_storage.db_client = db.Client.from_env()
-    return client_storage.db_client
+    if not hasattr(thread_clients, 'db_client'):
+        thread_clients.db_client = db.Client.from_env()
+    return thread_clients.db_client
 
 
 def get_thread_http_client():
-    if not hasattr(client_storage, 'http_client'):
-        client_storage.http_client = requests.Session()
-    return client_storage.http_client
+    if not hasattr(thread_clients, 'http_client'):
+        thread_clients.http_client = requests.Session()
+    return thread_clients.http_client
 
 
 @retry(tries=3, delay=1)
