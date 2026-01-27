@@ -36,6 +36,8 @@ def main(url: str = '*', tags: list[str] = []) -> None:
 
     csv_writer = csv.writer(stdout)
     csv_writer.writerow([
+        'Agencies',
+        'Offices',
         'URL',
         'Status',
         'Effective Status',
@@ -62,7 +64,20 @@ def main(url: str = '*', tags: list[str] = []) -> None:
         )
         effective_status = get_version_status(latest_valid)
 
+        page_agencies = [
+            tag['name'].split(':', 1)[1]
+            for tag in page['tags']
+            if tag['name'].startswith('agency:')
+        ]
+        page_offices = [
+            tag['name'].split(':', 1)[1]
+            for tag in page['tags']
+            if tag['name'].startswith('office:')
+        ]
+
         csv_writer.writerow([
+            ', '.join(sorted(page_agencies)),
+            ', '.join(sorted(page_offices)),
             page['url'],
             format_status(latest['status']),
             format_status(effective_status),

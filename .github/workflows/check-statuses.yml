@@ -104,20 +104,24 @@ jobs:
             instead of the typical 3-digit status code.
 
             The columns are:
-            1. **"URL":** The URL being monitored.
-            2. **"Status":** The actual HTTP status code it returned the last
+            1. **"Agencies":** The agencies that maintain this web page. May be
+                more than one (comma-separated list).
+            2. **"Offices":** Specific offices within the agencies that maintain
+                this web page. May be more than one (comma-separated list).
+            3. **"URL":** The URL being monitored.
+            4. **"Status":** The actual HTTP status code it returned the last
                 time it was checked.
-            3. **"Effective Status":** What we believe the current status code is
+            5. **"Effective Status":** What we believe the current status code is
                 in practice. This tries to account for things like CDNs and
                 firewalls blocking our crawlers, intermittent connection
                 problems, and pages that return 2xx (OK) status codes but that
                 are actually showing an error. (Let us know if this seems wrong
                 a lot!)
-            4. **"Capture Time":** The most recent time we checked this URL.
-            5. **"Latest Valid Capture Time":** The most recent time we checked
+            6. **"Capture Time":** The most recent time we checked this URL.
+            7. **"Latest Valid Capture Time":** The most recent time we checked
                 this URL and believe we got a valid response (i.e. we don't
                 think the crawler was blocked).
-            6. **"Scanner URL":** Follow this URL to see more details and a
+            8. **"Scanner URL":** Follow this URL to see more details and a
                 monitoring history of this page.
           convert_markdown: true
           attachments: 'out/*'
