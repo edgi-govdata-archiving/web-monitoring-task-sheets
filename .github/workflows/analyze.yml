@@ -94,7 +94,7 @@ jobs:
           cd readability-server
           npm start &
 
-      - name: Analyze!
+      - name: Analyze! (Binary Search)
         env:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
@@ -102,7 +102,7 @@ jobs:
         run: |
           echo "Tag options: '${TAG_OPTIONS}'"
           echo "Readability options: '${READABILITY_OPTIONS}'"
-          python generate_task_sheets.py \
+          python generate_task_sheets_binary_search.py \
             --output out \
             --after '${{ inputs.from || env.DEFAULT_FROM }}' \
             --before '${{ inputs.to || env.DEFAULT_TO }}' \
