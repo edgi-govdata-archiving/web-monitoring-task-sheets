@@ -227,7 +227,7 @@ def add_versions_to_page(page, after, before, candidates):
             # baseline version.
             baseline = version
             if maybe_bad_capture(baseline):
-                for candidate in islice(all_versions, 2):
+                for candidate in islice(all_versions, 100):
                     if (baseline['capture_time'] - candidate['capture_time']).days > 30:
                         break
                     elif not maybe_bad_capture(candidate):
