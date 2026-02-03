@@ -410,15 +410,14 @@ def group_by_tags(analyses: Iterable[PageAnalysisResult], tag_types=None) -> dic
     return groups
 
 
-def log_error(output, verbose, item):
-    page, _, error = item
-    if error and not isinstance(error, analyze.AnalyzableError):
-        output.write(f'ERROR {page["uuid"]}: {error}')
+def log_error(output, verbose, item: PageAnalysisResult) -> None:
+    if item.error and not isinstance(item.error, analyze.AnalyzableError):
+        output.write(f'ERROR {item.page["uuid"]}: {item.error}')
         if verbose:
-            if hasattr(error, 'traceback'):
-                output.write('\n'.join(error.traceback))
+            if hasattr(item.error, 'traceback'):
+                output.write('\n'.join(item.error.traceback))
             else:
-                traceback.print_tb(error.__traceback__, file=output)
+                traceback.print_tb(item.error.__traceback__, file=output)
 
 
 def pretty_print_analysis(page, analysis, output=None):
@@ -679,16 +678,17 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         if output_path:
             output_path.mkdir(exist_ok=True)
 
-
         pages = list_all_pages(pattern, after, before, tags, cancel=cancel, total=True)
         page_count = next(pages)
-        page_load_progress = tqdm(pages, desc='loading', unit=' pages', total=page_count)
-        raw_results = analyze_pages(page_load_progress, after, before, use_readability, threshold, cancel)
-        results = tqdm(raw_results, desc='analyzing', unit=' pages', total=page_count)
+        # pages = tqdm(pages, desc='loading', unit=' pages', total=page_count)
+        raw_results = analyze_pages(pages, after, before, use_readability, threshold, cancel)
+        progress = tqdm(raw_results, desc='analyzing', unit=' pages', total=page_count)
+        progress = tap(progress, lambda result: log_error(tqdm, verbose, result))
         # results = tap(results, lambda result: pretty_print_binary_analysis(result, tqdm))
-        results = list(results)
+        results = list(progress)
 
         if output_path:
+            print('Writing raw data...')
             def serializer(obj):
                 if isinstance(obj, datetime):
                     return obj.isoformat()
@@ -728,6 +728,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
 
                 f.write('\n]')
 
+        print('Writing spreadsheets...')
         filtered = [
             result
             for result in results
