@@ -207,10 +207,9 @@ def add_versions_to_page(page, after, before, candidates):
     def in_time_range(version) -> bool:
         return version['capture_time'] >= after and version['capture_time'] < before
 
-    all_versions = list_page_versions(page['uuid'], None, before, chunk_size=20)
     versions = []
     questionable_versions = []
-    for version in all_versions:
+    for version in candidates:
         if in_time_range(version):
             if maybe_bad_capture(version):
                 questionable_versions.append(version)
@@ -227,7 +226,7 @@ def add_versions_to_page(page, after, before, candidates):
             # baseline version.
             baseline = version
             if maybe_bad_capture(baseline):
-                for candidate in islice(all_versions, 100):
+                for candidate in islice(candidates, 100):
                     if (baseline['capture_time'] - candidate['capture_time']).days > 30:
                         break
                     elif not maybe_bad_capture(candidate):
@@ -261,8 +260,15 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
     result = PageAnalysisResult(
         id=page['uuid'],
         page=page,
-        timeframe=[full_period['versions'][0], full_period['versions'][-1]],
+        timeframe=[],
     )
+
+    if len(full_period['versions']) >= 2:
+        result.timeframe = [full_period['versions'][0], full_period['versions'][-1]]
+    else:
+        result.error = analyze.NoChangeError('Page has no changed versions')
+        return result
+
     _, overall, error = analyze.work_page(after, before, use_readability, full_period)
     if error:
         result.error = error
@@ -293,12 +299,16 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
     #     f"{versions[0]['capture_time']} ({len(periods[1])}, {len(periods[0])})"
     # )
     for period in reversed(periods):
-        # indent = INDENT * (depth + 1)
-        period_page = page.copy()
-        period_page['versions'] = period
-        # print(f"{indent}Analyzing {page['uuid']} {period[-1]['capture_time']} to {period[0]['capture_time']}")
+        if period[0]['body_hash'] == period[-1]['body_hash']:
+            continue
+
         period_after = period[-1]['capture_time'] + timedelta(minutes=1)
         period_before = period[0]['capture_time']
+        period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
+
+        if len(period_page['versions']) < 2:
+            continue
+
         _, period_result, error = analyze.work_page(period_after, period_before, use_readability, period_page)
         if isinstance(error, analyze.NoChangeError):
             # print(f"{indent}(No change)")
