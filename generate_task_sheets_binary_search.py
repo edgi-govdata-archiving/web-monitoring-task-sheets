@@ -1,10 +1,6 @@
 from analyst_sheets import analyze
-# from analyst_sheets.sheets import write_csv
+from analyst_sheets.sheets import write_csv
 from analyst_sheets.tools import (
-    generate_on_thread,
-    map_parallel,
-    QuitSignal,
-    ActivityMonitor,
     get_thread_db_client,
     tap
 )
@@ -13,18 +9,20 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import dateutil.parser
 from dateutil.tz import tzutc
+import functools
 import gzip
 from itertools import islice
 import json
+import multiprocessing
+import multiprocessing.pool
 from pathlib import Path
-from retry import retry
 import signal
 import sys
 from typing import Iterable, TypeAlias
 from tqdm import tqdm
 import threading
 import traceback
-from web_monitoring import db
+from web_monitoring.utils import QuitSignal, Signal
 
 
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
@@ -250,7 +248,7 @@ class PageAnalysisResult:
     error: Exception | None = None
 
 
-def analyze_page(after: datetime, before: datetime, use_readability: bool, threshold: float, page: dict) -> PageAnalysisResult:
+def analyze_page(after: datetime, before: datetime, use_readability: bool, threshold: float, deep: bool, page: dict) -> PageAnalysisResult:
     """
     Search for and analyze the relevant changes in a page.
     """
@@ -274,7 +272,7 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
         result.error = error
     else:
         result.overall = overall
-        if overall['priority'] >= threshold:
+        if deep and overall['priority'] >= threshold:
             try:
                 result.changes = find_relevant_changes(page, full_period['versions'], use_readability, threshold)
             except Exception as error:
@@ -299,7 +297,13 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
     #     f"{versions[0]['capture_time']} ({len(periods[1])}, {len(periods[0])})"
     # )
     for period in reversed(periods):
+        # indent = INDENT * (depth + 1)
+        # print(
+        #     f"{indent}Period {page['uuid']} {period[-1]['capture_time']} to "
+        #     f"{period[0]['capture_time']}"
+        # )
         if period[0]['body_hash'] == period[-1]['body_hash']:
+            # print(f"{indent}No change, skipping")
             continue
 
         period_after = period[-1]['capture_time'] + timedelta(minutes=1)
@@ -307,6 +311,7 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
         period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
 
         if len(period_page['versions']) < 2:
+            # print(f"{indent}No change after trim, skipping")
             continue
 
         _, period_result, error = analyze.work_page(period_after, period_before, use_readability, period_page)
@@ -317,6 +322,7 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
             # print(f'{indent}UHOH: {error}')
             raise error
         elif period_result['priority'] >= threshold:
+            # print(f"{indent}priority={period_result['priority']}")
             subchanges = find_relevant_changes(page, period, use_readability, threshold, depth + 2)
             # print(f"{indent}{len(subchanges)} Subchanges")
             if subchanges:
@@ -331,23 +337,14 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
     return results
 
 
-from analyst_sheets.tools import Signal
-import functools
-import multiprocessing
-
-
-def ignore_signal(signal_type, frame):
-    ...
-
-
 def setup_worker():
     # Ignore sigint because the main process is handling it.
     # Total abuse of the context manager protocol :\
-    handler = Signal((signal.SIGINT,), ignore_signal)
+    handler = Signal((signal.SIGINT,), signal.SIG_IGN)
     handler.__enter__()
 
 
-def analyze_pages(pages, after, before, use_readability=True, threshold=0.25, cancel=None):
+def analyze_pages(pages: dict, after: datetime, before: datetime, use_readability: bool = True, threshold: float = 0.25, deep: bool = False, cancel: threading.Event = None):
     """
     Analyze a set of pages in parallel across multiple processes. Yields tuples
     for each page with:
@@ -361,12 +358,12 @@ def analyze_pages(pages, after, before, use_readability=True, threshold=0.25, ca
         if cancel:
             close_on_event(pool, cancel)
 
-        work = functools.partial(analyze_page, after, before, use_readability, threshold)
+        work = functools.partial(analyze_page, after, before, use_readability, threshold, deep)
         yield from pool.imap_unordered(work, pages)
         pool.close()
 
 
-def close_on_event(pool, event):
+def close_on_event(pool: multiprocessing.pool.Pool, event):
     def wait_and_close():
         event.wait()
         pool.close()
@@ -376,26 +373,22 @@ def close_on_event(pool, event):
     return thread
 
 
-
-
-
-
-def group_by_hash(analyses):
+def group_by_hash(analyses: Iterable[PageAnalysisResult]):
     groups = {}
-    for page, analysis, error in analyses:
-        if analysis:
-            key = analysis['text']['diff_hash']
+    for result in analyses:
+        if result.overall:
+            key = result.overall['text']['diff_hash']
         else:
             key = '__ERROR__'
         if key not in groups:
             groups[key] = {'items': [], 'priority': 0}
 
-        groups[key]['items'].append((page, analysis, error))
+        groups[key]['items'].append(result)
         groups[key]['priority'] = max(groups[key]['priority'],
-                                      analysis and analysis['priority'] or 0)
+                                      result.overall and result.overall['priority'] or 0)
 
     for key, group in groups.items():
-        group['items'].sort(key=lambda x: x[1] and x[1]['priority'] or 0,
+        group['items'].sort(key=lambda x: x.overall and x.overall['priority'] or 0,
                             reverse=True)
 
     return groups
@@ -430,22 +423,7 @@ def log_error(output, verbose, item: PageAnalysisResult) -> None:
                 traceback.print_tb(item.error.__traceback__, file=output)
 
 
-def pretty_print_analysis(page, analysis, output=None):
-    message = [f'{page["url"]} ({page["uuid"]}):']
-    a = page['versions'][len(page['versions']) - 1]
-    b = page['versions'][0]
-    message.append(f'  a: {a["uuid"]}\n  b: {b["uuid"]}')
-    for key, value in analysis.items():
-        message.append(f'  {key}: {value}')
-
-    message = '\n'.join(message)
-    if output:
-        output.write(message)
-    else:
-        print(message, file=sys.stderr)
-
-
-def pretty_print_binary_analysis(result: PageAnalysisResult, output=None):
+def pretty_print_analysis(result: PageAnalysisResult, output=None):
     def analysis_output(analysis: dict) -> list[str]:
         return [
             f'    {key}: {value}'
@@ -456,10 +434,13 @@ def pretty_print_binary_analysis(result: PageAnalysisResult, output=None):
     if result.error:
         message.append(f'  {result.error}')
     else:
-        message.append(f'  {len(result.changes)} found changes')
-        message.append(f'  Overall period:')
-        message.extend(analysis_output(result.overall))
-        for change in result.changes:
+        changes = [{'versions': result.timeframe, 'analysis': result.overall}] + result.changes
+        for index, change in enumerate(changes):
+            if index == 0:
+                message.append('  Overall period:')
+            elif index == 1:
+                message.append(f'  {len(result.changes)} narrower changes:')
+
             a = change['versions'][-1]
             b = change['versions'][0]
             message.append(f'  a: {a["uuid"]} ({a["capture_time"]})')
@@ -473,216 +454,37 @@ def pretty_print_binary_analysis(result: PageAnalysisResult, output=None):
         print(message, file=sys.stderr)
 
 
-def filter_priority(results: list, threshold: float = 0) -> Iterable:
-    return filter(
-        lambda item: item[1] is None or item[1]['priority'] >= threshold,
-        results
-    )
-
-
-def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult]):
+def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult], deep: bool = False):
     sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
     for sheet_name, sheet_results in sheet_groups.items():
-        sorted_results = sorted(
-            sheet_results,
-            key=lambda r: (r.overall['priority'] if r.overall else 0),
-            reverse=True
-        )
-        write_csv(output_path, sheet_name, sorted_results)
+        sorted_results = []
+        # Group results by text diff hash only when not doing deep analysis.
+        # it's tough to deal with more than one level of grouping in sheets.
+        # TODO: maybe reconsider this?
+        if deep:
+            sorted_results = sorted(
+                sheet_results,
+                key=lambda r: (r.overall['priority'] if r.overall else 0),
+                reverse=True
+            )
+        else:
+            grouped_results = group_by_hash(sheet_results)
+            sorted_groups = sorted(
+                grouped_results.values(),
+                key=lambda group: group['priority'],
+                reverse=True
+            )
+            # Flatten the groups back into individual results.
+            sorted_results = (
+                item
+                for result in sorted_groups
+                for item in result['items']
+            )
+
+        write_csv(output_path, sheet_name, sorted_results, deep)
 
 
-from analyst_sheets import sheets
-import csv
-import re
-
-
-def write_csv(parent_directory: Path, name: str, results: Iterable[PageAnalysisResult]):
-    """
-    Write a CSV to disk with rows representing changes found tuples.
-    """
-    filename = re.sub(r'[:/]', '_', name) + '.csv'
-    filepath = parent_directory / filename
-
-    timestamp = datetime.utcnow().isoformat() + 'Z'
-
-    with filepath.open('w') as file:
-        writer = csv.writer(file)
-        writer.writerow(sheets.HEADERS)
-
-        index = 0
-        for result in results:
-            maintainers = ', '.join(m['name'] for m in result.page['maintainers'])
-
-            index += 1
-            page_row = [
-                index,
-                'OVERALL',
-                timestamp,
-                maintainers,
-                name,
-                sheets.clean_string(result.page['title']),
-                result.page['url'],
-                '---',
-                sheets.create_view_url(result.page, result.timeframe[-1], result.timeframe[0]),
-                sheets.create_ia_changes_url(result.page, result.timeframe[-1], result.timeframe[0]),
-                result.timeframe[0]['capture_time'].isoformat(),
-                result.timeframe[-1]['capture_time'].isoformat(),
-            ]
-
-            if result.overall:
-                analysis = result.overall
-                page_row.extend([
-                    analysis['source']['diff_length'],
-                    sheets.format_hash(analysis['source']['diff_hash']),
-                    analysis['text']['diff_length'],
-                    sheets.format_hash(analysis['text']['diff_hash']),
-                    None,
-                    format(analysis['priority'], '.3f'),
-                    '',
-
-                    analysis['root_page'],
-                    analysis['status_changed'],
-                    analysis['status_b'],
-                    result.timeframe[0]['status'],
-                    analysis['text']['readable'],
-                    ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
-                    format(analysis['text']['percent_changed'], '.3f'),
-                    analysis['text']['diff_max_length'],
-                    sheets.format_hash(analysis['links']['diff_hash']),
-                    analysis['links']['diff_length'],
-                    format(analysis['links']['diff_ratio'], '.3f'),
-                    analysis['links']['removed_self_link'],
-                    analysis['redirect']['is_client_redirect'] or '',
-                    analysis['redirect']['changed'] or '',
-                    sheets.format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
-                    sheets.format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
-                ])
-            else:
-                page_row.extend([
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    '?',
-                    str(result.error)
-                ])
-            writer.writerow(page_row)
-
-            if result.changes:
-                for change in result.changes:
-                    index += 1
-                    analysis = change['analysis']
-                    timeframe = change['versions']
-                    row = [
-                        index,
-                        timeframe[0]['uuid'],
-                        timestamp,
-                        maintainers,
-                        name,
-                        sheets.clean_string(result.page['title']),
-                        result.page['url'],
-                        '---',
-                        sheets.create_view_url(result.page, timeframe[-1], timeframe[0]),
-                        sheets.create_ia_changes_url(result.page, timeframe[-1], timeframe[0]),
-                        timeframe[0]['capture_time'].isoformat(),
-                        timeframe[-1]['capture_time'].isoformat(),
-                        analysis['source']['diff_length'],
-                        sheets.format_hash(analysis['source']['diff_hash']),
-                        analysis['text']['diff_length'],
-                        sheets.format_hash(analysis['text']['diff_hash']),
-                        None,
-                        format(analysis['priority'], '.3f'),
-                        '',
-
-                        analysis['root_page'],
-                        analysis['status_changed'],
-                        analysis['status_b'],
-                        result.timeframe[0]['status'],
-                        analysis['text']['readable'],
-                        ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
-                        format(analysis['text']['percent_changed'], '.3f'),
-                        analysis['text']['diff_max_length'],
-                        sheets.format_hash(analysis['links']['diff_hash']),
-                        analysis['links']['diff_length'],
-                        format(analysis['links']['diff_ratio'], '.3f'),
-                        analysis['links']['removed_self_link'],
-                        analysis['redirect']['is_client_redirect'] or '',
-                        analysis['redirect']['changed'] or '',
-                        sheets.format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
-                        sheets.format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
-                    ]
-                    writer.writerow(row)
-
-            writer.writerow(['---' for _ in sheets.HEADERS])
-
-
-def format_row(page, analysis, error, index, name, timestamp):
-    version_start = page['versions'][len(page['versions']) - 1]
-    version_end = page['versions'][0]
-
-    row = [
-        index + 1,
-        version_end['uuid'],
-        timestamp,
-        ', '.join(m['name'] for m in page['maintainers']),
-        name,
-        clean_string(page['title']),
-        page['url'],
-        '',
-        create_view_url(page, version_start, version_end),
-        # Empty column for "latest to base"; it's only present to preserve
-        # column order for pasting into the significant changes sheet.
-        create_ia_changes_url(page, version_start, version_end),
-        version_end['capture_time'].isoformat(),
-        # Empty column for earliest capture time. It's unused and only present
-        # to preserve column order for pasting into other spreadsheets.
-        '',
-    ]
-
-    if analysis:
-        row.extend([
-            analysis['source']['diff_length'],
-            format_hash(analysis['source']['diff_hash']),
-            analysis['text']['diff_length'],
-            format_hash(analysis['text']['diff_hash']),
-            len(page['versions']),
-            format(analysis['priority'], '.3f'),
-            '',
-
-            analysis['root_page'],
-            analysis['status_changed'],
-            analysis['status_b'],
-            version_end['status'],
-            analysis['text']['readable'],
-            ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
-            format(analysis['text']['percent_changed'], '.3f'),
-            analysis['text']['diff_max_length'],
-            format_hash(analysis['links']['diff_hash']),
-            analysis['links']['diff_length'],
-            format(analysis['links']['diff_ratio'], '.3f'),
-            analysis['links']['removed_self_link'],
-            analysis['redirect']['is_client_redirect'] or '',
-            analysis['redirect']['changed'] or '',
-            format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
-            format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
-        ])
-    else:
-        row.extend([
-            None,
-            None,
-            None,
-            None,
-            len(page['versions']),
-            '?',
-            str(error)
-        ])
-
-    return row
-
-
-def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, verbose=False, use_readability=True):
-    from pprint import pp
+def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, deep=False, verbose=False, use_readability=True):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
         if output_path:
@@ -690,23 +492,21 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
 
         pages = list_all_pages(pattern, after, before, tags, cancel=cancel, total=True)
         page_count = next(pages)
-        # pages = tqdm(pages, desc='loading', unit=' pages', total=page_count)
-        raw_results = analyze_pages(pages, after, before, use_readability, threshold, cancel)
-        progress = tqdm(raw_results, desc='analyzing', unit=' pages', total=page_count)
-        progress = tap(progress, lambda result: log_error(tqdm, verbose, result))
-        # results = tap(results, lambda result: pretty_print_binary_analysis(result, tqdm))
-        results = list(progress)
+        results = analyze_pages(pages, after, before, use_readability, threshold, deep, cancel)
+        results = tqdm(results, desc='analyzing', unit=' pages', total=page_count)
+        results = tap(results, lambda result: log_error(tqdm, verbose, result))
+        # results = tap(results, lambda result: pretty_print_analysis(result, tqdm))
+        results = [r for r in results if not isinstance(r.error, analyze.NoChangeError)]
 
         if output_path:
-            print('Writing raw data...')
             def serializer(obj):
                 if isinstance(obj, datetime):
                     return obj.isoformat()
                 elif isinstance(obj, Exception):
                     return f'{type(obj).__name__}: {obj}'
-                # return f'!!! type:{type(obj)} !!!'
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 
+            print('Writing raw data...')
             count = len(results)
             sorted_results = sorted(results, key=lambda r: r.page['url_key'])
             with gzip.open(output_path / '_results.json.gz', 'wt', encoding='utf-8') as f:
@@ -742,13 +542,13 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         filtered = [
             result
             for result in results
-            if result.error is None and result.overall['priority'] >= threshold
+            if result.overall is None or result.overall['priority'] >= threshold
         ]
         if output_path:
-            write_sheets(output_path, filtered)
+            write_sheets(output_path, filtered, deep)
         else:
             for result in filtered:
-                pretty_print_binary_analysis(result, output=tqdm)
+                pretty_print_analysis(result, output=tqdm)
 
         # Clear the last line from TQDM, which seems to leave behind the second
         # progress bar. :\
@@ -778,6 +578,7 @@ if __name__ == '__main__':
     parser.add_argument('--after', type=timeframe_date, help='Only include versions after this date. May also be a number of hours before the current time.')
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
     parser.add_argument('--threshold', type=float, default=0.5, help='Minimum priority value to include in output.')
+    parser.add_argument('--deep', action='store_true', help='Do a deep analysis and find every notable change on each page, rather than just analyzing the whole time period.')
     parser.add_argument('--verbose', action='store_true', help='Show detailed error messages')
     parser.add_argument('--skip-readability', dest='use_readability', action='store_false', help='Do not use readability to parse pages.')
     # Need the ability to actually start/stop the readability server if we want this option
@@ -802,5 +603,6 @@ if __name__ == '__main__':
          after=options.after,
          output_path=options.output,
          threshold=options.threshold,
+         deep=options.deep,
          verbose=options.verbose,
          use_readability=options.use_readability)
