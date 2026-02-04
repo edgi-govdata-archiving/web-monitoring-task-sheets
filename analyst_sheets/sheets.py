@@ -29,7 +29,7 @@ HEADERS = [
     'Diff Hash',
     'Text Diff Length',
     'Text Diff Hash',
-    '# versions',
+    '---',  # Formerly "# Versions", no longer relevant.
     'Priority',
 
     'Error',
