@@ -648,14 +648,10 @@ def work_page(after, before, use_readability, page):
         return (page, None, error)
 
 
-def ignore_signal(signal_type, frame):
-    ...
-
-
 def setup_worker():
     # Ignore sigint because the main process is handling it.
     # Total abuse of the context manager protocol :\
-    handler = Signal((signal.SIGINT,), ignore_signal)
+    handler = Signal((signal.SIGINT,), signal.SIG_IGN)
     handler.__enter__()
 
 

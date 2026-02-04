@@ -3,7 +3,6 @@ from analyst_sheets.sheets import write_csv
 from analyst_sheets.tools import (
     generate_on_thread,
     map_parallel,
-    QuitSignal,
     ActivityMonitor,
     get_thread_db_client,
     tap
@@ -24,6 +23,7 @@ from tqdm import tqdm
 import threading
 import traceback
 from web_monitoring import db
+from web_monitoring.utils import QuitSignal
 
 
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]

@@ -1,7 +1,5 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-import multiprocessing
-import os
 from nltk.corpus import stopwords
 import re
 import requests
@@ -10,7 +8,7 @@ import sys
 import threading
 import time
 from web_monitoring import db
-from web_monitoring.utils import FiniteQueue, Signal
+from web_monitoring.utils import FiniteQueue
 
 
 class generate_on_thread(threading.Thread):
@@ -306,60 +304,6 @@ def parallel(*calls):
     with ThreadPoolExecutor(max_workers=len(calls)) as executor:
         tasks = [executor.submit(call, *args) for call, *args in calls]
         return [task.result() for task in tasks]
-
-
-# TODO: backport this to web-monitoring-processing. It has added logic to clean
-# up child processes before hard aborting.
-class QuitSignal(Signal):
-    """
-    A context manager that handles system signals by triggering a
-    `threading.Event` instance, giving your program an opportunity to clean up
-    and shut down gracefully. If the signal is repeated a second time, the
-    process quits immediately.
-
-    Parameters
-    ----------
-    signals : int or tuple of int
-        The signal or list of signals to handle.
-    graceful_message : string, optional
-        A message to print to stdout when a signal is received.
-    final_message : string, optional
-        A message to print to stdout before exiting the process when a repeat
-        signal is received.
-
-    Examples
-    --------
-    Quit on SIGINT (ctrl+c) or SIGTERM:
-
-    >>> with QuitSignal((signal.SIGINT, signal.SIGTERM)) as cancel:
-    >>>     for item in some_list:
-    >>>         if cancel.is_set():
-    >>>             break
-    >>>         do_some_work()
-    """
-    def __init__(self, signals, graceful_message=None, final_message=None):
-        self.event = threading.Event()
-        self.graceful_message = graceful_message or (
-            'Attempting to finish existing work before exiting. Press ctrl+c '
-            'to stop immediately.')
-        self.final_message = final_message or (
-            'Stopping immediately and aborting all work!')
-        super().__init__(signals, self.handle_interrupt)
-
-    def handle_interrupt(self, signal_type, frame):
-        if not self.event.is_set():
-            print(self.graceful_message)
-            self.event.set()
-        else:
-            # Clean up any child processes, otherwise they might be left alive.
-            for child in multiprocessing.active_children():
-                child.terminate()
-            print(self.final_message)
-            os._exit(100)
-
-    def __enter__(self):
-        super().__enter__()
-        return self.event
 
 
 class ActivityMonitor:
