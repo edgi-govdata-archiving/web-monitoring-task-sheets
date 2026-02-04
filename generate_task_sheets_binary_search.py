@@ -303,7 +303,7 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
             continue
 
         period_after = period[-1]['capture_time'] + timedelta(minutes=1)
-        period_before = period[0]['capture_time']
+        period_before = period[0]['capture_time'] + timedelta(minutes=1)
         period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
 
         if len(period_page['versions']) < 2:
