@@ -1,4 +1,5 @@
 from analyst_sheets.analyze import get_version_status, load_url
+from analyst_sheets.sheets import format_datetime, format_status
 import csv
 from datetime import datetime, timedelta, timezone
 from generate_task_sheets import (
@@ -6,24 +7,8 @@ from generate_task_sheets import (
     add_versions_to_page,
     list_page_versions,
 )
-import re
 from sys import stderr, stdout
 from tqdm import tqdm
-
-
-def format_datetime(value: datetime | None) -> str:
-    if value is None:
-        return ''
-
-    value = value.replace(microsecond=0)
-    return re.sub(r'\+00:00$', 'Z', value.isoformat())
-
-
-def format_status(value: str | int | None) -> str:
-    if value is None or value == 600 or value == '':
-        return '(offline)'
-
-    return str(value)
 
 
 def main(url: str = '*', tags: list[str] = []) -> None:
@@ -47,7 +32,12 @@ def main(url: str = '*', tags: list[str] = []) -> None:
     ])
 
     for page in progress:
-        page = add_versions_to_page(page, after=after, before=before)
+        page = add_versions_to_page(
+            page,
+            after=after,
+            before=before,
+            candidates=list_page_versions(page['uuid'], None, before, chunk_size=20)
+        )
         latest = next(list_page_versions(page['uuid'], None, before, chunk_size=1))
         latest_valid = page['versions'][0] if len(page['versions']) else latest
         if not latest_valid:
