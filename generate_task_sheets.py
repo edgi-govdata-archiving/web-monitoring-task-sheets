@@ -332,6 +332,7 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
         result.error = analyze.NoChangeError('Page has no changed versions')
         return result
 
+    # TODO: should probably drop the work_page wrapper
     _, overall, error = analyze.work_page(after, before, use_readability, full_period)
     if error:
         result.error = error
@@ -346,7 +347,9 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
     return result
 
 
+# FIXME: clean up verbose debug logging
 INDENT = '    '
+
 
 def find_relevant_changes(page: dict, versions: list[dict], use_readability: bool, threshold: float, depth: int = 0) -> list[dict]:
     threshold = max(0.2, threshold)
@@ -566,7 +569,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                     return f'{type(obj).__name__}: {obj}'
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 
-            print('Writing raw data...')
+            print('Writing raw data...', file=sys.stderr)
             count = len(results)
             sorted_results = sorted(results, key=lambda r: r.page['url_key'])
             with gzip.open(output_path / '_results.json.gz', 'wt', encoding='utf-8') as f:
@@ -598,7 +601,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
 
                 f.write('\n]')
 
-        print('Writing spreadsheets...')
+        print('Writing spreadsheets...', file=sys.stderr)
         filtered = [
             result
             for result in results
@@ -609,10 +612,6 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         else:
             for result in filtered:
                 pretty_print_analysis(result, output=tqdm)
-
-        # Clear the last line from TQDM, which seems to leave behind the second
-        # progress bar. :\
-        print('', file=sys.stderr)
 
 
 def timeframe_date(date_string):
