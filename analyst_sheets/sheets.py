@@ -62,7 +62,7 @@ def write_csv(parent_directory: Path, name: str, results, deep):
     filename = re.sub(r'[:/]', '_', name) + '.csv'
     filepath = parent_directory / filename
 
-    timestamp = datetime.now(timezone.utc).isoformat() + 'Z'
+    timestamp = format_datetime(datetime.now(timezone.utc))
 
     with filepath.open('w') as file:
         writer = csv.writer(file)
@@ -115,8 +115,8 @@ def format_row(page, timeframe, analysis, error, index, name, timestamp, overall
         '',
         create_view_url(page, version_start, version_end),
         create_ia_changes_url(page, version_start, version_end),
-        version_end['capture_time'].isoformat(),
-        version_start['capture_time'].isoformat(),
+        format_datetime(version_end['capture_time']),
+        format_datetime(version_start['capture_time']),
     ]
 
     if analysis:
@@ -133,8 +133,8 @@ def format_row(page, timeframe, analysis, error, index, name, timestamp, overall
 
             analysis['root_page'],
             analysis['status_changed'],
-            analysis['status_b'],
-            version_end['status'],
+            format_status(analysis['status_b']),
+            format_status(version_end['status']),
             analysis['text']['readable'],
             ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
             format(analysis['text']['percent_changed'], '.3f'),
@@ -193,6 +193,14 @@ def ia_timestamp(datetime):
     return datetime.strftime('%Y%m%d%H%M%S')
 
 
+def format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ''
+
+    value = value.replace(microsecond=0)
+    return re.sub(r'\+00:00$', 'Z', value.isoformat())
+
+
 def format_hash(digest):
     if digest == EMPTY_HASH or not digest:
         return '[no change]'
@@ -205,3 +213,10 @@ def format_redirects(server_redirects, client_redirect=None):
         formatted = f' ⇥ {client_redirect}'
 
     return formatted
+
+
+def format_status(value: str | int | None) -> str:
+    if value is None or value == 600 or value == '':
+        return '(offline)'
+
+    return str(value)
