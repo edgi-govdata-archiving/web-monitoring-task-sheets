@@ -13,6 +13,7 @@ import functools
 import gzip
 from itertools import islice
 import json
+import logging
 import multiprocessing
 import multiprocessing.pool
 from pathlib import Path
@@ -23,6 +24,9 @@ from tqdm import tqdm
 import threading
 import traceback
 from web_monitoring.utils import QuitSignal, Signal
+
+
+logger = logging.getLogger('task_sheets')
 
 
 @dataclass
@@ -248,6 +252,7 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
     """
     Search for and analyze the relevant changes in a page.
     """
+    logger.debug(f'Analyzing {page["uuid"]}')
     candidate_versions = list_page_versions(page['uuid'], None, before, chunk_size=20)
     full_period = add_versions_to_page(page.copy(), after, before, candidate_versions)
 
@@ -277,8 +282,7 @@ def analyze_page(after: datetime, before: datetime, use_readability: bool, thres
     return result
 
 
-# FIXME: clean up verbose debug logging
-INDENT = '    '
+INDENT = '│   '
 
 
 def find_relevant_changes(page: dict, versions: list[dict], use_readability: bool, threshold: float, depth: int = 0) -> list[dict]:
@@ -290,18 +294,18 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
     results = []
     split_at = len(versions) // 2
     periods = [versions[0:split_at + 1], versions[split_at:]]
-    # print(
-    #     f"{INDENT * depth}Splitting {page['uuid']} {versions[-1]['capture_time']} to "
-    #     f"{versions[0]['capture_time']} ({len(periods[1])}, {len(periods[0])})"
-    # )
+    logger.debug(
+        f"{INDENT * depth}⨁ Splitting {page['uuid']} {versions[-1]['capture_time']} to "
+        f"{versions[0]['capture_time']} ({len(periods[1])}, {len(periods[0])})"
+    )
     for period in reversed(periods):
-        # indent = INDENT * (depth + 1)
-        # print(
-        #     f"{indent}Period {page['uuid']} {period[-1]['capture_time']} to "
-        #     f"{period[0]['capture_time']}"
-        # )
+        indent = INDENT * (depth + 1)
+        logger.debug(
+            f"{indent[:-4]}├ ▶︎ Period  {page['uuid']} {period[-1]['capture_time']} to "
+            f"{period[0]['capture_time']}"
+        )
         if period[0]['body_hash'] == period[-1]['body_hash']:
-            # print(f"{indent}No change, skipping")
+            logger.debug(f"{indent}No change, skipping")
             continue
 
         period_after = period[-1]['capture_time'] + timedelta(minutes=1)
@@ -309,35 +313,38 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
         period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
         if len(period_page['versions']) != len(period):
             period = period_page['versions']
+            logger.debug(
+                f"{indent}Trimmed {page['uuid']} {period[-1]['capture_time']} to "
+                f"{period[0]['capture_time']}"
+            )
 
         if len(period) < 2:
-            # print(f"{indent}No change after trim, skipping")
+            logger.debug(f"{indent}No change after trim, skipping")
             continue
 
         _, period_result, error = analyze.work_page(period_after, period_before, use_readability, period_page)
         if isinstance(error, analyze.NoChangeError):
-            # print(f"{indent}(No change)")
-            ...
+            logger.debug(f"{indent}(No change: {error})")
         elif error:
-            # print(f'{indent}UHOH: {error}')
             raise error
         elif period_result['priority'] >= threshold:
-            # print(f"{indent}priority={period_result['priority']}")
-            subchanges = find_relevant_changes(page, period, use_readability, threshold, depth + 2)
-            # print(f"{indent}{len(subchanges)} Subchanges")
+            logger.debug(f"{indent}priority={period_result['priority']}")
+            subchanges = find_relevant_changes(page, period, use_readability, threshold, depth + 1)
+            logger.debug(f"{indent}{len(subchanges)} Subchanges")
             if subchanges:
                 results.extend(subchanges)
             else:
                 change = dict(versions=[period[0], period[-1]], analysis=period_result)
                 results.append(change)
         else:
-            # print(f"{indent}(Below threshold)")
-            ...
+            logger.debug(f"{indent}(Below threshold)")
 
     return results
 
 
-def setup_worker():
+def setup_worker(log_level: int):
+    logging.basicConfig()
+    logger.setLevel(log_level)
     # Ignore sigint because the main process is handling it.
     # Total abuse of the context manager protocol :\
     handler = Signal((signal.SIGINT,), signal.SIG_IGN)
@@ -354,7 +361,8 @@ def analyze_pages(pages: dict, after: datetime, before: datetime, use_readabilit
        an instance of `AnalyzableError` if the page or versions were not of a
        type that this module can actually analyze.
     """
-    with multiprocessing.Pool(initializer=setup_worker, maxtasksperchild=100) as pool:
+    setup = functools.partial(setup_worker, logger.level)
+    with multiprocessing.Pool(initializer=setup, maxtasksperchild=100) as pool:
         if cancel:
             close_on_event(pool, cancel)
 
@@ -517,8 +525,8 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
                         for version in change['versions']:
                             # FIXME: should not have to clean these up. Should not be
                             # attached to version objects in analyze module.
-                            version.pop('response', None)
-                            version.pop('normalized', None)
+                            version.pop('_body_text', None)
+                            version.pop('_body_normalized', None)
                             version.pop('_list_meta', None)
                             version.pop('_list_links', None)
 
@@ -575,6 +583,12 @@ if __name__ == '__main__':
     # Need the ability to actually start/stop the readability server if we want this option
     # parser.add_argument('--readability', action='store_true', help='Only analyze pages with URLs matching this pattern.')
     options = parser.parse_args()
+
+    logging.basicConfig()
+    if options.verbose:
+        logger.setLevel(logging.DEBUG)
+
+    logger.debug('Hello debugging at top')
 
     # Validate before vs. after
     if options.before and options.after and options.before <= options.after:
