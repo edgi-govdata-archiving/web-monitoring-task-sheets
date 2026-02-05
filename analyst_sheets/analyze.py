@@ -167,8 +167,8 @@ def analyze_text(page, a, b, use_readability=True):
     # Check whether our readability fallback would work.
     # We always do this (rather than only as a fallback) so we can debug issues
     # with it by reporting any URLs that would have failed.
-    text_a = a['normalized']
-    text_b = b['normalized']
+    text_a = get_body_normalized(a)
+    text_b = get_body_normalized(b)
     content_a, readable_a = get_main_content(text_a)
     content_b, readable_b = get_main_content(text_b)
     found_content_area = bool(content_a and content_b)
@@ -179,16 +179,16 @@ def analyze_text(page, a, b, use_readability=True):
         not any(item in page['url'] for item in SKIP_READABILITY_URLS)
     ):
         with ActivityMonitor(f'load readable content for {page["uuid"]}'):
-            response_a, response_b = parallel((parse_html_readability, a['response'].text, a['url']),
-                                              (parse_html_readability, b['response'].text, b['url']))
+            response_a, response_b = parallel((parse_html_readability, get_body_text(a), a['url']),
+                                              (parse_html_readability, get_body_text(b), b['url']))
         # parse_html_readability returns None if the content couldn't be parsed by
         # readability. If either one of the original documents couldn't be parsed,
         # fall back to straight HTML text for *both* (we want what we're diffing to
         # conceptually match up).
         if response_a and response_b:
             readable = True
-            text_a = '\n'.join(normalize_text(line) for line in response_a.text.split('\n'))
-            text_b = '\n'.join(normalize_text(line) for line in response_b.text.split('\n'))
+            text_a = '\n'.join(normalize_text(line) for line in response_a.split('\n'))
+            text_b = '\n'.join(normalize_text(line) for line in response_b.split('\n'))
             raw_diff = html_source_diff(text_a, text_b)
 
     if not readable:
@@ -278,7 +278,7 @@ def analyze_text(page, a, b, use_readability=True):
 
 
 def analyze_links(a, b):
-    diff = links_diff_json(a['normalized'], b['normalized'])['diff']
+    diff = links_diff_json(get_body_normalized(a), get_body_normalized(b))['diff']
     diff_changes = [item for item in diff if item[0] != 0]
 
     a_url = normalize_url(a['url'], a['url'])
@@ -299,7 +299,7 @@ def analyze_links(a, b):
 def analyze_source(a, b):
     # EXPERIMENT: use normalized HTML for analysis.
     # diff = html_source_diff(a['response'].text, b['response'].text)['diff']
-    diff = html_source_diff(a['normalized'], b['normalized'])['diff']
+    diff = html_source_diff(get_body_normalized(a), get_body_normalized(b))['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     return dict(
         diff_hash=hash_changes(diff_changes),
@@ -486,7 +486,7 @@ META_REFRESH_URL_PATTERN = re.compile(r'content="\d+(\.\d*)?;\s*url=([^"]+)"')
 
 
 def get_client_redirect(version):
-    match = META_REFRESH_PATTERN.search(version['response'].text)
+    match = META_REFRESH_PATTERN.search(get_body_text(version))
     if match:
         url_match = META_REFRESH_URL_PATTERN.search(match.group(0))
         if url_match:
@@ -545,6 +545,22 @@ def priority_factor(ratio):
     return math.log(1 + (math.e - 1) * ratio)
 
 
+def get_body_text(version: dict) -> str:
+    if '_body_text' not in version:
+        response = load_url(version['body_url'])
+        version['_body_text'] = response.text
+
+    return version['_body_text']
+
+
+def get_body_normalized(version: dict) -> str:
+    if '_body_normalized' not in version:
+        html = normalize_html(get_body_text(version), version['url'])
+        version['_body_normalized'] = html
+
+    return version['_body_normalized']
+
+
 def analyze_page(page, after, before, use_readability=True):
     """
     Analyze a page from web-monitoring-db and return information about how the
@@ -560,10 +576,9 @@ def analyze_page(page, after, before, use_readability=True):
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
     with ActivityMonitor(f'load raw content for {page["uuid"]}'):
-        a['response'], b['response'] = parallel((load_url, a['body_url']),
-                                                (load_url, b['body_url']))
-    a['normalized'] = normalize_html(a['response'].text, a['url'])
-    b['normalized'] = normalize_html(b['response'].text, b['url'])
+        # Preload and normalize raw HTML bodies in parallel.
+        parallel((get_body_normalized, a),
+                 (get_body_normalized, b))
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
