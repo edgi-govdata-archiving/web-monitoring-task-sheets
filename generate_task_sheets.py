@@ -307,8 +307,10 @@ def find_relevant_changes(page: dict, versions: list[dict], use_readability: boo
         period_after = period[-1]['capture_time'] + timedelta(minutes=1)
         period_before = period[0]['capture_time'] + timedelta(minutes=1)
         period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
+        if len(period_page['versions']) != len(period):
+            period = period_page['versions']
 
-        if len(period_page['versions']) < 2:
+        if len(period) < 2:
             # print(f"{indent}No change after trim, skipping")
             continue
 
