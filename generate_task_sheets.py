@@ -1,32 +1,41 @@
 from analyst_sheets import analyze
 from analyst_sheets.sheets import write_csv
 from analyst_sheets.tools import (
-    generate_on_thread,
-    map_parallel,
-    ActivityMonitor,
     get_thread_db_client,
     tap
 )
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import dateutil.parser
 from dateutil.tz import tzutc
+import functools
 import gzip
 from itertools import islice
 import json
+import logging
+import multiprocessing
+import multiprocessing.pool
 from pathlib import Path
-from retry import retry
 import signal
 import sys
-from typing import Iterable, TypeAlias
+from typing import Iterable
 from tqdm import tqdm
 import threading
 import traceback
-from web_monitoring import db
-from web_monitoring.utils import QuitSignal
+from web_monitoring.utils import QuitSignal, Signal
 
 
-ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
+logger = logging.getLogger('task_sheets')
+
+
+@dataclass
+class PageAnalysisResult:
+    page: dict
+    timeframe: list[dict]
+    overall: dict | None = None
+    changes: list[dict] = field(default_factory=list)
+    error: Exception | None = None
 
 
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
@@ -198,7 +207,7 @@ def trim_version_range(versions: list[dict], start_only: bool = False) -> list[d
     )))
 
 
-def add_versions_to_page(page, after, before):
+def add_versions_to_page(page: dict, after: datetime, before: datetime, candidates: Iterable[dict]) -> dict:
     """
     Find all the relevant versions of a page in the given timeframe and attach
     them to the page object as 'versions'.
@@ -206,10 +215,9 @@ def add_versions_to_page(page, after, before):
     def in_time_range(version) -> bool:
         return version['capture_time'] >= after and version['capture_time'] < before
 
-    all_versions = list_page_versions(page['uuid'], None, before, chunk_size=20)
     versions = []
     questionable_versions = []
-    for version in all_versions:
+    for version in candidates:
         if in_time_range(version):
             if maybe_bad_capture(version):
                 questionable_versions.append(version)
@@ -226,7 +234,7 @@ def add_versions_to_page(page, after, before):
             # baseline version.
             baseline = version
             if maybe_bad_capture(baseline):
-                for candidate in islice(all_versions, 100):
+                for candidate in islice(candidates, 100):
                     if (baseline['capture_time'] - candidate['capture_time']).days > 30:
                         break
                     elif not maybe_bad_capture(candidate):
@@ -240,34 +248,167 @@ def add_versions_to_page(page, after, before):
     return page
 
 
-def group_by_hash(analyses):
+def analyze_page(after: datetime, before: datetime, use_readability: bool, threshold: float, deep: bool, page: dict) -> PageAnalysisResult:
+    """
+    Search for and analyze the relevant changes in a page.
+    """
+    logger.debug(f'Analyzing {page["uuid"]}')
+    candidate_versions = list_page_versions(page['uuid'], None, before, chunk_size=20)
+    full_period = add_versions_to_page(page.copy(), after, before, candidate_versions)
+
+    result = PageAnalysisResult(
+        page=page,
+        timeframe=[],
+    )
+
+    if len(full_period['versions']) >= 2:
+        result.timeframe = [full_period['versions'][0], full_period['versions'][-1]]
+    else:
+        result.error = analyze.NoChangeError('Page has no changed versions')
+        return result
+
+    # TODO: should probably drop the work_page wrapper
+    _, overall, error = analyze.work_page(after, before, use_readability, full_period)
+    if error:
+        result.error = error
+    else:
+        result.overall = overall
+        if deep and overall['priority'] >= threshold:
+            try:
+                result.changes = find_relevant_changes(page, full_period['versions'], use_readability, threshold)
+            except Exception as error:
+                result.error = error
+
+    return result
+
+
+INDENT = '│   '
+
+
+def find_relevant_changes(page: dict, versions: list[dict], use_readability: bool, threshold: float, depth: int = 0) -> list[dict]:
+    threshold = max(0.2, threshold)
+
+    if len(versions) < 3:
+        return []
+
+    results = []
+    split_at = len(versions) // 2
+    periods = [versions[0:split_at + 1], versions[split_at:]]
+    logger.debug(
+        f"{INDENT * depth}⨁ Splitting {page['uuid']} {versions[-1]['capture_time']} to "
+        f"{versions[0]['capture_time']} ({len(periods[1])}, {len(periods[0])})"
+    )
+    for period in reversed(periods):
+        indent = INDENT * (depth + 1)
+        logger.debug(
+            f"{indent[:-4]}├ ▶︎ Period  {page['uuid']} {period[-1]['capture_time']} to "
+            f"{period[0]['capture_time']}"
+        )
+        if period[0]['body_hash'] == period[-1]['body_hash']:
+            logger.debug(f"{indent}No change, skipping")
+            continue
+
+        period_after = period[-1]['capture_time'] + timedelta(minutes=1)
+        period_before = period[0]['capture_time'] + timedelta(minutes=1)
+        period_page = add_versions_to_page(page.copy(), period_after, period_before, period)
+        if len(period_page['versions']) != len(period):
+            period = period_page['versions']
+            logger.debug(
+                f"{indent}Trimmed {page['uuid']} {period[-1]['capture_time']} to "
+                f"{period[0]['capture_time']}"
+            )
+
+        if len(period) < 2:
+            logger.debug(f"{indent}No change after trim, skipping")
+            continue
+
+        _, period_result, error = analyze.work_page(period_after, period_before, use_readability, period_page)
+        if isinstance(error, analyze.NoChangeError):
+            logger.debug(f"{indent}(No change: {error})")
+        elif error:
+            raise error
+        elif period_result['priority'] >= threshold:
+            logger.debug(f"{indent}priority={period_result['priority']}")
+            subchanges = find_relevant_changes(page, period, use_readability, threshold, depth + 1)
+            logger.debug(f"{indent}{len(subchanges)} Subchanges")
+            if subchanges:
+                results.extend(subchanges)
+            else:
+                change = dict(versions=[period[0], period[-1]], analysis=period_result)
+                results.append(change)
+        else:
+            logger.debug(f"{indent}(Below threshold)")
+
+    return results
+
+
+def setup_worker(log_level: int):
+    logging.basicConfig()
+    logger.setLevel(log_level)
+    # Ignore sigint because the main process is handling it.
+    # Total abuse of the context manager protocol :\
+    handler = Signal((signal.SIGINT,), signal.SIG_IGN)
+    handler.__enter__()
+
+
+def analyze_pages(pages: dict, after: datetime, before: datetime, use_readability: bool = True, threshold: float = 0.25, deep: bool = False, cancel: threading.Event = None):
+    """
+    Analyze a set of pages in parallel across multiple processes. Yields tuples
+    for each page with:
+    0. The page
+    1. The analysis (or `None` if analysis failed)
+    2. An exception if analysis failed or `None` if it succeeded. This will be
+       an instance of `AnalyzableError` if the page or versions were not of a
+       type that this module can actually analyze.
+    """
+    setup = functools.partial(setup_worker, logger.level)
+    with multiprocessing.Pool(initializer=setup, maxtasksperchild=100) as pool:
+        if cancel:
+            close_on_event(pool, cancel)
+
+        work = functools.partial(analyze_page, after, before, use_readability, threshold, deep)
+        yield from pool.imap_unordered(work, pages)
+        pool.close()
+
+
+def close_on_event(pool: multiprocessing.pool.Pool, event):
+    def wait_and_close():
+        event.wait()
+        pool.close()
+
+    thread = threading.Thread(target=wait_and_close, daemon=True)
+    thread.start()
+    return thread
+
+
+def group_by_hash(analyses: Iterable[PageAnalysisResult]):
     groups = {}
-    for page, analysis, error in analyses:
-        if analysis:
-            key = analysis['text']['diff_hash']
+    for result in analyses:
+        if result.overall:
+            key = result.overall['text']['diff_hash']
         else:
             key = '__ERROR__'
         if key not in groups:
             groups[key] = {'items': [], 'priority': 0}
 
-        groups[key]['items'].append((page, analysis, error))
+        groups[key]['items'].append(result)
         groups[key]['priority'] = max(groups[key]['priority'],
-                                      analysis and analysis['priority'] or 0)
+                                      result.overall and result.overall['priority'] or 0)
 
     for key, group in groups.items():
-        group['items'].sort(key=lambda x: x[1] and x[1]['priority'] or 0,
+        group['items'].sort(key=lambda x: x.overall and x.overall['priority'] or 0,
                             reverse=True)
 
     return groups
 
 
-def group_by_tags(analyses, tag_types=None):
+def group_by_tags(analyses: Iterable[PageAnalysisResult], tag_types=None) -> dict[str, list[PageAnalysisResult]]:
     tag_types = tag_types or ['domain:']
     groups = defaultdict(list)
-    for page, analysis, error in analyses:
+    for result in analyses:
         group_parts = []
         for prefix in tag_types:
-            for tag in page['tags']:
+            for tag in result.page['tags']:
                 if tag['name'] == prefix:
                     group_parts.append(prefix)
                     break
@@ -275,29 +416,39 @@ def group_by_tags(analyses, tag_types=None):
                     group_parts.append(tag['name'][len(prefix):])
                     break
         group_name = '--'.join(group_parts)
-        groups[group_name].append((page, analysis, error))
+        groups[group_name].append(result)
 
     return groups
 
 
-def log_error(output, verbose, item):
-    page, _, error = item
-    if error and not isinstance(error, analyze.AnalyzableError):
-        output.write(f'ERROR {page["uuid"]}: {error}')
+def log_error(output, verbose, item: PageAnalysisResult) -> None:
+    if item.error and not isinstance(item.error, analyze.AnalyzableError):
+        output.write(f'ERROR {item.page["uuid"]}: {item.error}')
         if verbose:
-            if hasattr(error, 'traceback'):
-                output.write('\n'.join(error.traceback))
+            if hasattr(item.error, 'traceback'):
+                output.write('\n'.join(item.error.traceback))
             else:
-                traceback.print_tb(error.__traceback__, file=output)
+                traceback.print_tb(item.error.__traceback__, file=output)
 
 
-def pretty_print_analysis(page, analysis, output=None):
-    message = [f'{page["url"]} ({page["uuid"]}):']
-    a = page['versions'][len(page['versions']) - 1]
-    b = page['versions'][0]
-    message.append(f'  a: {a["uuid"]}\n  b: {b["uuid"]}')
-    for key, value in analysis.items():
-        message.append(f'  {key}: {value}')
+def pretty_print_analysis(result: PageAnalysisResult, output=None):
+    message = [f'{result.page["url"]} ({result.page["uuid"]}):']
+    if result.error:
+        message.append(f'  {result.error}')
+    else:
+        changes = [{'versions': result.timeframe, 'analysis': result.overall}] + result.changes
+        for index, change in enumerate(changes):
+            if index == 0:
+                message.append('  Overall period:')
+            elif index == 1:
+                message.append(f'  {len(result.changes)} narrower changes:')
+
+            a = change['versions'][-1]
+            b = change['versions'][0]
+            message.append(f'  a: {a["uuid"]} ({a["capture_time"]})')
+            message.append(f'  b: {b["uuid"]} ({b["capture_time"]})')
+            for key, value in change['analysis'].items():
+                message.append(f'    {key}: {value}')
 
     message = '\n'.join(message)
     if output:
@@ -306,162 +457,101 @@ def pretty_print_analysis(page, analysis, output=None):
         print(message, file=sys.stderr)
 
 
-def filter_priority(results: list, threshold: float = 0) -> Iterable:
-    return filter(
-        lambda item: item[1] is None or item[1]['priority'] >= threshold,
-        results
-    )
-
-
-def write_sheets(output_path: Path, results: Iterable[ResultItem]):
+def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult], deep: bool = False):
     sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
-    for sheet_name, results in sheet_groups.items():
-        # Group results into similar changes and sort those groups.
-        grouped_results = group_by_hash(results)
-        sorted_groups = sorted(
-            grouped_results.values(),
-            key=lambda group: group['priority'],
-            reverse=True
-        )
+    for sheet_name, sheet_results in sheet_groups.items():
+        sorted_results = []
+        # Group results by text diff hash only when not doing deep analysis.
+        # it's tough to deal with more than one level of grouping in sheets.
+        # TODO: maybe reconsider this?
+        if deep:
+            sorted_results = sorted(
+                sheet_results,
+                key=lambda r: (r.overall['priority'] if r.overall else 0),
+                reverse=True
+            )
+        else:
+            grouped_results = group_by_hash(sheet_results)
+            sorted_groups = sorted(
+                grouped_results.values(),
+                key=lambda group: group['priority'],
+                reverse=True
+            )
+            # Flatten the groups back into individual results.
+            sorted_results = (
+                item
+                for result in sorted_groups
+                for item in result['items']
+            )
 
-        # Flatten the groups back into individual results.
-        sorted_rows = (
-            item
-            for result in sorted_groups
-            for item in result['items']
-        )
-
-        write_csv(output_path, sheet_name, sorted_rows)
+        write_csv(output_path, sheet_name, sorted_results, deep)
 
 
-def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, verbose=False, use_readability=True):
+def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, deep=False, verbose=False, use_readability=True):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
         if output_path:
             output_path.mkdir(exist_ok=True)
 
-        pages = generate_on_thread(list_all_pages, pattern, after, before,
-                                   tags, cancel=cancel, total=True).output
-
+        pages = list_all_pages(pattern, after, before, tags, cancel=cancel, total=True)
         page_count = next(pages)
-        pages_and_versions = map_parallel(add_versions_to_page, pages, after,
-                                          before, cancel=cancel,
-                                          parallel=4).output
+        results = analyze_pages(pages, after, before, use_readability, threshold, deep, cancel)
+        results = tqdm(results, desc='analyzing', unit=' pages', total=page_count)
+        results = tap(results, lambda result: log_error(tqdm, verbose, result))
+        # results = tap(results, lambda result: pretty_print_analysis(result, tqdm))
+        results = [r for r in results if not isinstance(r.error, analyze.NoChangeError)]
 
-        # Separate progress bar just for data loading from Scanner's DB
-        pages_and_versions = tqdm(pages_and_versions, desc='  loading',
-                                  unit=' pages', total=page_count)
-
-        def iterate_all(source):
-            yield from source
-        pages_and_versions_queue = generate_on_thread(iterate_all, pages_and_versions, cancel=cancel).output
-        results = analyze.analyze_pages(pages_and_versions_queue, after, before, use_readability=use_readability, cancel=cancel)
-        # results = analyze.analyze_pages(pages_and_versions, after, before, cancel=cancel)
-        progress = tqdm(results, desc='analyzing', unit=' pages', total=page_count)
-        # Log any unexpected errors along the way.
-        results = tap(progress, lambda result: log_error(tqdm, verbose, result))
-        # Don't output pages where there was no overall change.
-        results = (item for item in results if not isinstance(item[2], analyze.NoChangeError))
-
-        # DEBUG READABILITY FALLBACK CODE
-        results = list(results)
-        no_content_readable = []
-        no_content_unreadable = []
-        for page, analysis, error in results:
-            if not error and not analysis['text']['found_content_area']:
-                if analysis['redirect']['is_client_redirect']:
-                    continue
-                a_id = page['versions'][len(page['versions']) - 1]['uuid']
-                b_id = page['versions'][0]['uuid']
-                if analysis['text']['readable']:
-                    no_content_readable.append((page['url'], page['uuid'], a_id, b_id))
-                else:
-                    no_content_unreadable.append((page['url'], page['uuid'], a_id, b_id))
-        def sortable_entry(entry):
-            if entry[0].startswith('http:'):
-                return (f'https{entry[0][4:]}', *entry[1:])
-            return entry
-        no_content_readable.sort(key=sortable_entry)
-        no_content_unreadable.sort(key=sortable_entry)
-        readability_debug = []
-        if len(no_content_readable):
-            readability_debug.append('No content found, but readability worked:')
-            for url, page_id, a_id, b_id in no_content_readable:
-                readability_debug.append(f'  {url}: https://api.monitoring.envirodatagov.org/api/v0/pages/{page_id}/changes/{a_id}..{b_id}')
-        if len(no_content_unreadable):
-            readability_debug.append('No content found, AND readability failed:')
-            for url, page_id, a_id, b_id in no_content_unreadable:
-                readability_debug.append(f'  {url}: https://api.monitoring.envirodatagov.org/api/v0/pages/{page_id}/changes/{a_id}..{b_id}')
-        if output_path:
-            with (output_path / '_readability_debug.txt').open('w') as f:
-                f.write('\n'.join(readability_debug) + '\n')
-        else:
-            print('\n'.join(readability_debug), file=sys.stderr)
-        # END DEBUG READABLILITY FALLBACK
-
-        # TODO: should probably be moved to another module?
         if output_path:
             def serializer(obj):
                 if isinstance(obj, datetime):
                     return obj.isoformat()
                 elif isinstance(obj, Exception):
                     return f'{type(obj).__name__}: {obj}'
-                # return f'!!! type:{type(obj)} !!!'
                 raise TypeError(f'Cannot JSON serialize {type(obj)}')
 
+            print('Writing raw data...', file=sys.stderr)
             count = len(results)
-            sorted_results = sorted(results, key=lambda r: r[0]['url_key'])
+            sorted_results = sorted(results, key=lambda r: r.page['url_key'])
             with gzip.open(output_path / '_results.json.gz', 'wt', encoding='utf-8') as f:
                 f.write('[\n')
-                for index, (page, analysis, error) in enumerate(sorted_results):
-                    serializable_page = page.copy()
+                for index, result in enumerate(sorted_results):
+                    serializable_page = result.page.copy()
                     del serializable_page['_list_meta']
                     del serializable_page['_list_links']
-                    serializable_page['versions'] = []
+                    if 'versions' in serializable_page:
+                        del serializable_page['versions']
 
-                    # FIXME: should not have to clean these up. Should not be
-                    # attached to version objects in analyze module.
-                    if len(page['versions']) > 0:
-                        first_version = page['versions'][0].copy()
-                        first_version.pop('response', None)
-                        first_version.pop('normalized', None)
-                        first_version.pop('_list_meta', None)
-                        first_version.pop('_list_links', None)
-                        serializable_page['versions'] = [
-                            first_version,
-                            *[{} for v in page['versions'][1:-1]]
-                        ]
-                    if len(page['versions']) > 1:
-                        last_version = page['versions'][-1].copy()
-                        last_version.pop('response', None)
-                        last_version.pop('normalized', None)
-                        last_version.pop('_list_meta', None)
-                        last_version.pop('_list_links', None)
-                        serializable_page['versions'].append(last_version)
+                    for change in result.changes:
+                        for version in change['versions']:
+                            # FIXME: should not have to clean these up. Should not be
+                            # attached to version objects in analyze module.
+                            version.pop('_body_text', None)
+                            version.pop('_body_normalized', None)
+                            version.pop('_list_meta', None)
+                            version.pop('_list_links', None)
 
                     json.dump({
                         'page': serializable_page,
-                        'analysis': analysis,
-                        'error': error
+                        'overall': result.overall,
+                        'changes': result.changes,
+                        'error': result.error
                     }, f, default=serializer)
                     if index + 1 < count:
                         f.write(',\n')
 
                 f.write('\n]')
 
-        # Filter out results under the threshold
-        results = filter_priority(results, threshold)
-
+        print('Writing spreadsheets...', file=sys.stderr)
+        filtered = [
+            result
+            for result in results
+            if result.overall is None or result.overall['priority'] >= threshold
+        ]
         if output_path:
-            write_sheets(output_path, results)
+            write_sheets(output_path, filtered, deep)
         else:
-            for page, analysis, error in results:
-                if analysis:
-                    pretty_print_analysis(page, analysis, tqdm)
-
-        # Clear the last line from TQDM, which seems to leave behind the second
-        # progress bar. :\
-        print('', file=sys.stderr)
+            for result in filtered:
+                pretty_print_analysis(result, output=tqdm)
 
 
 def timeframe_date(date_string):
@@ -487,11 +577,18 @@ if __name__ == '__main__':
     parser.add_argument('--after', type=timeframe_date, help='Only include versions after this date. May also be a number of hours before the current time.')
     parser.add_argument('--before', type=timeframe_date, help='Only include versions before this date. May also be a number of hours before the current time.')
     parser.add_argument('--threshold', type=float, default=0.5, help='Minimum priority value to include in output.')
+    parser.add_argument('--deep', action='store_true', help='Do a deep analysis and find every notable change on each page, rather than just analyzing the whole time period.')
     parser.add_argument('--verbose', action='store_true', help='Show detailed error messages')
     parser.add_argument('--skip-readability', dest='use_readability', action='store_false', help='Do not use readability to parse pages.')
     # Need the ability to actually start/stop the readability server if we want this option
     # parser.add_argument('--readability', action='store_true', help='Only analyze pages with URLs matching this pattern.')
     options = parser.parse_args()
+
+    logging.basicConfig()
+    if options.verbose:
+        logger.setLevel(logging.DEBUG)
+
+    logger.debug('Hello debugging at top')
 
     # Validate before vs. after
     if options.before and options.after and options.before <= options.after:
@@ -511,5 +608,6 @@ if __name__ == '__main__':
          after=options.after,
          output_path=options.output,
          threshold=options.threshold,
+         deep=options.deep,
          verbose=options.verbose,
          use_readability=options.use_readability)

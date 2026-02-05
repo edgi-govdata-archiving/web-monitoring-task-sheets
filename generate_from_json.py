@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 import sys
 from web_monitoring.db import DbJsonDecoder
-from generate_task_sheets import ResultItem, filter_priority, write_sheets
+from generate_task_sheets import PageAnalysisResult, write_sheets
 
 
-def read_json_data(input: Path) -> list[ResultItem]:
+def read_json_data(input: Path) -> list[PageAnalysisResult]:
     with input.open('rb') as file:
         start = file.read(2)
         file.seek(0)
@@ -19,10 +19,12 @@ def read_json_data(input: Path) -> list[ResultItem]:
         raw_data = json.load(file, cls=DbJsonDecoder)
 
     return [
-        (
-            item['page'],
-            item['analysis'],
-            Exception(item['error']) if item['error'] else None,
+        PageAnalysisResult(
+            page=item['page'],
+            timeframe=[],
+            overall=item['overall'],
+            changes=item['changes'],
+            error=Exception(item['error']) if item['error'] else None,
         )
         for item in raw_data
     ]
@@ -36,12 +38,17 @@ def main(input: Path, output: Path, tags: list[str], threshold: float) -> None:
             item for item in data
             if any(
                 tag['name'] in tags
-                for tag in item[0]['tags']
+                for tag in item.page['tags']
             )
         ]
 
     output.mkdir(exist_ok=True)
-    write_sheets(output, filter_priority(data, threshold))
+    data = [
+        result
+        for result in data
+        if result.overall is None or result.overall['priority'] >= threshold
+    ]
+    write_sheets(output, data)
 
 
 if __name__ == '__main__':
