@@ -39,6 +39,11 @@ on:
         required: false
         type: boolean
         default: true
+      deep:
+        description: 'Deep (Binary Search) Analysis'
+        required: false
+        type: boolean
+        default: false
       upload_folder:
         description: 'Save to GDrive with this folder name'
         required: false
@@ -94,22 +99,25 @@ jobs:
           cd readability-server
           npm start &
 
-      - name: Analyze! (Binary Search)
+      - name: Analyze!
         env:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
           TAG_OPTIONS: ${{ inputs.tag && format('--tag ''{0}''', inputs.tag) || '' }}
+          DEEP_OPTIONS: ${{ inputs.deep && '--deep' || '' }}
         run: |
           echo "Tag options: '${TAG_OPTIONS}'"
           echo "Readability options: '${READABILITY_OPTIONS}'"
-          python generate_task_sheets_binary_search.py \
+          echo "Deep options: '${DEEP_OPTIONS}"
+          python generate_task_sheets.py \
             --output out \
             --after '${{ inputs.from || env.DEFAULT_FROM }}' \
             --before '${{ inputs.to || env.DEFAULT_TO }}' \
             --threshold '${{ inputs.threshold || env.DEFAULT_THRESHOLD }}' \
             --pattern '${{ inputs.pattern || env.DEFAULT_PATTERN }}' \
             ${{ env.TAG_OPTIONS }} \
-            $READABILITY_OPTIONS
+            $READABILITY_OPTIONS \
+            $DEEP_OPTIONS
 
       - name: Upload Results
         uses: actions/upload-artifact@v6
