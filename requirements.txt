@@ -9,5 +9,6 @@ git+https://github.com/edgi-govdata-archiving/web-monitoring-processing@main
 # These are dependencies of web-monitoring-processing, but we need to install
 # them explicitly because of the --no-binary argument, which is specific to Pip
 # and not supported in setup.py.
-html5-parser ~=0.4.9 --no-binary lxml
+html5-parser ~=0.4.12 --no-binary lxml
 lxml ~=6.0.2
+beautifulsoup4 ~=4.14.3
