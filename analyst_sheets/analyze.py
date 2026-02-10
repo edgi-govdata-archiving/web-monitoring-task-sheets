@@ -576,9 +576,11 @@ def analyze_page(page, after, before, use_readability=True):
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
     with ActivityMonitor(f'load raw content for {page["uuid"]}'):
-        # Preload and normalize raw HTML bodies in parallel.
-        parallel((get_body_normalized, a),
-                 (get_body_normalized, b))
+        # Preload raw HTML bodies.
+        parallel((get_body_text, a), (get_body_text, b))
+        # Pre-normalize (normalize modifies global state; is not thread-safe).
+        get_body_normalized(a)
+        get_body_normalized(b)
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
