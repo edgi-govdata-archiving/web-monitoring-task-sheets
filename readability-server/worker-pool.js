@@ -32,11 +32,12 @@ export class SimpleWorker {
   terminate (cause = null) {
     // NOTE: terminate() returns a promise; it *may* be prudent to wait for it
     // before regenerating a new worker.
-    console.time('Terminating')
+    const timerKey = `Terminating ${this._worker.threadId}`;
+    console.time(timerKey)
     const termination = this._worker.terminate()
       .then(() => console.log('Terminated'))
       .catch(() => console.error('Failed to terminate'))
-      .finally(() => console.timeEnd('Terminating'));
+      .finally(() => console.timeEnd(timerKey));
     this._worker = this._createWorker();
     if (this._promise) {
       this._handleMessage({error: cause || 'TERMINATED'});
