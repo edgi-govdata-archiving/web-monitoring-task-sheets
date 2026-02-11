@@ -3,10 +3,9 @@ Tools for outputting CSVs based on analysis data.
 """
 
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import re
-import sys
 from surt import surt
 
 
@@ -30,7 +29,7 @@ HEADERS = [
     'Diff Hash',
     'Text Diff Length',
     'Text Diff Hash',
-    '# versions',
+    '---',  # Formerly "# Versions", no longer relevant.
     'Priority',
 
     'Error',
@@ -54,31 +53,60 @@ HEADERS = [
 ]
 
 
-def write_csv(parent_directory, name, rows):
+def write_csv(parent_directory: Path, name: str, results, deep):
     """
-    Write a CSV to disk with rows representing `(page, analysis, error)`
-    tuples.
+    Write a CSV to disk with rows representing found changes. If ``deep`` is
+    true, write a row for every change found in each result. Otherwise, write
+    one row for the overall analysis in each result.
     """
     filename = re.sub(r'[:/]', '_', name) + '.csv'
     filepath = parent_directory / filename
 
-    timestamp = datetime.utcnow().isoformat() + 'Z'
+    timestamp = format_datetime(datetime.now(timezone.utc))
 
     with filepath.open('w') as file:
         writer = csv.writer(file)
         writer.writerow(HEADERS)
 
-        for index, [page, analysis, error] in enumerate(rows):
-            writer.writerow(format_row(page, analysis, error, index, name, timestamp))
+        for index, result in enumerate(results):
+            row_number = index + 1
+            writer.writerow(format_row(
+                result.page,
+                result.timeframe,
+                result.overall,
+                result.error,
+                row_number,
+                name,
+                timestamp,
+                overall=deep,
+            ))
+            if deep:
+                for change_index, change in enumerate(result.changes):
+                    row_number = f'{index + 1}-{change_index + 1}'
+                    analysis = change['analysis']
+                    timeframe = change['versions']
+                    writer.writerow(format_row(
+                        result.page,
+                        timeframe,
+                        analysis,
+                        None,
+                        row_number,
+                        name,
+                        timestamp,
+                        overall=False,
+                    ))
+
+                # Blank row to help separate page groups in deep analysis.
+                writer.writerow(['---' for _ in HEADERS])
 
 
-def format_row(page, analysis, error, index, name, timestamp):
-    version_start = page['versions'][len(page['versions']) - 1]
-    version_end = page['versions'][0]
+def format_row(page, timeframe, analysis, error, index, name, timestamp, overall: bool):
+    version_start = timeframe[-1]
+    version_end = timeframe[0]
 
     row = [
-        index + 1,
-        version_end['uuid'],
+        index,
+        'OVERALL' if overall else version_end['uuid'],
         timestamp,
         ', '.join(m['name'] for m in page['maintainers']),
         name,
@@ -86,13 +114,9 @@ def format_row(page, analysis, error, index, name, timestamp):
         page['url'],
         '',
         create_view_url(page, version_start, version_end),
-        # Empty column for "latest to base"; it's only present to preserve
-        # column order for pasting into the significant changes sheet.
         create_ia_changes_url(page, version_start, version_end),
-        version_end['capture_time'].isoformat(),
-        # Empty column for earliest capture time. It's unused and only present
-        # to preserve column order for pasting into other spreadsheets.
-        '',
+        format_datetime(version_end['capture_time']),
+        format_datetime(version_start['capture_time']),
     ]
 
     if analysis:
@@ -101,14 +125,16 @@ def format_row(page, analysis, error, index, name, timestamp):
             format_hash(analysis['source']['diff_hash']),
             analysis['text']['diff_length'],
             format_hash(analysis['text']['diff_hash']),
-            len(page['versions']),
+            # Placeholder column: version count is no longer relevant.
+            '',
             format(analysis['priority'], '.3f'),
+            # Error column is empty in this case. :)
             '',
 
             analysis['root_page'],
             analysis['status_changed'],
-            analysis['status_b'],
-            version_end['status'],
+            format_status(analysis['status_b']),
+            format_status(version_end['status']),
             analysis['text']['readable'],
             ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
             format(analysis['text']['percent_changed'], '.3f'),
@@ -128,7 +154,7 @@ def format_row(page, analysis, error, index, name, timestamp):
             None,
             None,
             None,
-            len(page['versions']),
+            '',
             '?',
             str(error)
         ])
@@ -167,6 +193,14 @@ def ia_timestamp(datetime):
     return datetime.strftime('%Y%m%d%H%M%S')
 
 
+def format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ''
+
+    value = value.replace(microsecond=0)
+    return re.sub(r'\+00:00$', 'Z', value.isoformat())
+
+
 def format_hash(digest):
     if digest == EMPTY_HASH or not digest:
         return '[no change]'
@@ -179,3 +213,10 @@ def format_redirects(server_redirects, client_redirect=None):
         formatted = f' ⇥ {client_redirect}'
 
     return formatted
+
+
+def format_status(value: str | int | None) -> str:
+    if value is None or value == 600 or value == '':
+        return '(offline)'
+
+    return str(value)
