@@ -81,7 +81,7 @@ jobs:
           name: output
           path: out
 
-      - uses: dawidd6/action-send-mail@v8
+      - uses: dawidd6/action-send-mail@v9
         with:
           connection_url: '${{ secrets.EMAIL_CONNECTION }}'
           to: '${{ needs.analyze.outputs.email_to }}'
