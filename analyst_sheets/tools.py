@@ -289,13 +289,17 @@ def load_url_readability(url, **request_args):
         return response
 
 
-def parse_html_readability(html, url):
-    return load_url_readability('http://localhost:7323/text',
-                                method='POST',
-                                params={'url': url},
-                                data=html.encode('utf-8'),
-                                headers={'Content-Type': 'text/html; charset=utf-8'},
-                                timeout=45)
+def parse_html_readability(html, url) -> str | None:
+    response = load_url_readability('http://localhost:7323/text',
+                                    method='POST',
+                                    params={'url': url},
+                                    data=html.encode('utf-8'),
+                                    headers={'Content-Type': 'text/html; charset=utf-8'},
+                                    timeout=45)
+    if response:
+        return response.text
+    else:
+        return None
 
 
 def parallel(*calls):
