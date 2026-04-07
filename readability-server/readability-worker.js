@@ -22,6 +22,12 @@ WorkerPool.implementWorker((html, url, force = false) => {
     return null;
   }
 
+  // Include hidden accordions, tabs, disclosure areas, etc. in the text.
+  dom.window.document.querySelectorAll('[hidden]')
+    .forEach(node => node.removeAttribute('hidden'));
+
+  // Strip out other areas we know should not be included that Readability often
+  // fails to exclude.
   // XXX: Can we do this better?????
   dom.window.document.querySelectorAll('[class*="teaser"],[class*="related"]')
     .forEach(node => node.setAttribute('hidden', 'hidden'))
