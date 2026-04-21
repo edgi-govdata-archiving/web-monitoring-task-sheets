@@ -108,7 +108,7 @@ jobs:
         run: |
           echo "Tag options: '${TAG_OPTIONS}'"
           echo "Readability options: '${READABILITY_OPTIONS}'"
-          echo "Deep options: '${DEEP_OPTIONS}"
+          echo "Deep options: '${DEEP_OPTIONS}'"
           python generate_task_sheets.py \
             --output out \
             --after '${{ inputs.from || env.DEFAULT_FROM }}' \
