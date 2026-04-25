@@ -138,9 +138,11 @@ def maybe_bad_capture(version) -> bool:
         # *definitely* a bad capture, while the cache_error is only probably.
         # In the future, we may refactor this function to return a float
         # indicating probable badness instead of a boolean.
-        if headers.get('x-amzn-waf-action', '').lower() == 'challenge':
+        if headers.get('x-amzn-waf-action', '').lower() in ('challenge', 'captcha'):
             return True
-        elif cache_error:
+        # We're pretty confident CloudFront will never return a 404 as part of
+        # its own WAF (it will return a 403). 404s only come from the origin.
+        elif cache_error and status != 404:
             return True
     elif server == 'cloudflare':
         if headers.get('cf-mitigated', '').lower() == 'challenge':
