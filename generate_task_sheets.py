@@ -130,7 +130,12 @@ def maybe_bad_capture(version) -> bool:
     is_html = content_type.startswith('text/html')
 
     if server.startswith('awselb/') and is_short_or_unknown and is_html:
-        return True
+        # TODO: Keeping these separate since the 403 is more concretely a bad
+        # capture, but 502/503/504 gateway errors are more debatable.
+        if status == 403:
+            return True
+        else:
+            return True
     elif server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
     elif server == 'cloudfront':
@@ -145,6 +150,9 @@ def maybe_bad_capture(version) -> bool:
         elif cache_error and status != 404:
             return True
     elif server == 'cloudflare':
+        # NOTES: When Cloudflare provides `server-timing`, it will identify its
+        # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
+        # but no record of origin time is also good hint of WAF behavior.
         if headers.get('cf-mitigated', '').lower() == 'challenge':
             return True
     elif not server:
