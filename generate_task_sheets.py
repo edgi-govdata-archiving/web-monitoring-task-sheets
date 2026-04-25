@@ -15,6 +15,7 @@ import gzip
 from itertools import islice
 import json
 from pathlib import Path
+import re
 from retry import retry
 import signal
 import sys
@@ -143,6 +144,37 @@ def maybe_bad_capture(version) -> bool:
             return True
     elif server == 'cloudflare':
         if headers.get('cf-mitigated', '').lower() == 'challenge':
+            return True
+    elif not server:
+        # Very lazy server-timing header parsing. We could parse out the
+        # description and the duration, but those don't matter too much here.
+        server_timing = {}
+        for item in headers.get('server-timing', '').split(','):
+            key, _, value = item.partition(';')
+            server_timing[key.lower().strip()] = value.strip()
+
+        # Akamai Edgesuite doesn't explicitly identify itself, but it seems to
+        # always include recognizable server-timing features and a 4xx status.
+        #
+        # Example good capture:
+        #   server-timing: cdn-cache; desc=MISS, edge; dur=22, origin; dur=369, ak_p; desc="1776475897753_386075716_3264768070_38998_7536_11_0_255";dur=1
+        #
+        # Example bad capture:
+        #   server-timing: cdn-cache; desc=HIT, edge; dur=1, ak_p; desc="1775872487192_399532111_2052555389_12_6012_263_573_-";dur=1
+        #
+        # (Unfortunately, can't find any examples of good cache hits.)
+        if (
+            status < 500
+            and is_short_or_unknown
+            and 'ak_p' in server_timing
+            and 'cdn-cache' in server_timing
+            # Expect no origin info (since WAF will have never hit the origin)
+            # and single-digit milliseconds at the edge.
+            and 'origin' not in server_timing
+            and re.search(r'(^|;)\s*dur=\d(\.|$)', server_timing.get('edge', ''))
+        ):
+            # NOTE: If we switch to returning a float, this should probably be
+            # slightly less than complete confidence because it's so fuzzy.
             return True
     # TODO: see if we have any Azure CDN examples?
     # TODO: More general heuristics?
