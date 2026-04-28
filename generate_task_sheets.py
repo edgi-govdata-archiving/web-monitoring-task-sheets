@@ -14,7 +14,7 @@ from dateutil.tz import tzutc
 import gzip
 from itertools import islice
 import json
-from logging import getLogger
+import logging
 from pathlib import Path
 import re
 from retry import retry
@@ -30,7 +30,7 @@ from web_monitoring.utils import QuitSignal
 
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
@@ -549,6 +549,8 @@ def timeframe_date(date_string):
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
+
     import argparse
     parser = argparse.ArgumentParser(description='Count term changes in monitored pages.')
     parser.add_argument('--output', type=Path, help='Output CSV files in this directory')
