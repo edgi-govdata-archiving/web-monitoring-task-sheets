@@ -155,7 +155,7 @@ def maybe_bad_capture(version) -> bool:
 
     if status >= 400 and server.startswith('awselb/'):
         # We assume that blocking-related status code coming from directly from
-        # an AWS ESB and not the origin server is really blocking.
+        # an AWS ELB and not the origin server is really blocking.
         if status == 429:
             return True
         elif status == 403 and is_short_or_unknown:
