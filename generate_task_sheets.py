@@ -14,6 +14,7 @@ from dateutil.tz import tzutc
 import gzip
 from itertools import islice
 import json
+from logging import getLogger
 from pathlib import Path
 import re
 from retry import retry
@@ -28,6 +29,8 @@ from web_monitoring.utils import QuitSignal
 
 
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
+
+logger = getLogger(__name__)
 
 
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
@@ -126,6 +129,30 @@ def maybe_bad_capture(version) -> bool:
     content_type = version['media_type'] or headers.get('content-type', '')
     is_html = content_type.startswith('text/html')
 
+    # AWS WAF sends the `x-amzn-waf-action` header for a lot of blocking
+    # actions. It can come from different servers, so should be handled on its
+    # own as a clear, concrete signal.
+    if waf_action := headers.get('x-amzn-waf-action', '').lower():
+        if waf_action in ('challenge', 'captcha'):
+            return True
+        else:
+            logger.warning(f'Unknown value for x-amzn-waf-action header: "{waf_action}"')
+
+    if cf_mitigated := headers.get('cf-mitigated', '').lower():
+        if server == 'cloudflare':
+            if cf_mitigated == 'challenge':
+                return True
+            else:
+                logger.warning(f'Unknown value for cf-mitigated header: "{cf_mitigated}"')
+        else:
+            # We expect cf-mitigated to always come alongside a server header
+            # for Cloudflare, unlike with AWS WAF above.
+            logger.warning(
+                'Unknown `server` for cf-mitigated header: '
+                f'"server: {server}", "cf-mitigated: {cf_mitigated}" '
+                '(expected "server: cloudflare")'
+            )
+
     if status >= 400 and server.startswith('awselb/'):
         # We assume that blocking-related status code coming from directly from
         # an AWS ESB and not the origin server is really blocking.
@@ -146,22 +173,18 @@ def maybe_bad_capture(version) -> bool:
     elif status >= 400 and server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
     elif server == 'cloudfront':
-        # TODO: Keeping these branches separate b/c the challenge response is
-        # *definitely* a bad capture, while the cache_error is only probably.
-        # In the future, we may refactor this function to return a float
-        # indicating probable badness instead of a boolean.
-        if headers.get('x-amzn-waf-action', '').lower() in ('challenge', 'captcha'):
-            return True
         # We're pretty confident CloudFront will never return a 404 as part of
         # its own WAF (it will return a 403). 404s only come from the origin.
-        elif cache_error and status >= 400 and status != 404:
+        # Still... this is low confidence.
+        if cache_error and status >= 400 and status != 404:
             return True
-    elif server == 'cloudflare':
-        # NOTES: When Cloudflare provides `server-timing`, it will identify its
-        # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
-        # but no record of origin time may also be a good hint of WAF behavior.
-        if headers.get('cf-mitigated', '').lower() == 'challenge':
-            return True
+    # elif server == 'cloudflare':
+    #     # We don't have any special hints for Cloudlare beyond the cf-mitigated
+    #     # header, which is already handled above.
+    #     # NOTES: When Cloudflare provides `server-timing`, it will identify its
+    #     # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
+    #     # but no record of origin time may also be a good hint of WAF behavior.
+    #     ...
     elif status >= 400 and not server:
         # Very lazy server-timing header parsing. We could parse out the
         # description and the duration, but those don't matter too much here.
