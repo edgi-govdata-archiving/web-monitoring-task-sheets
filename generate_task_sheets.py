@@ -185,7 +185,7 @@ def maybe_bad_capture(version) -> bool:
     #     # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
     #     # but no record of origin time may also be a good hint of WAF behavior.
     #     ...
-    elif status >= 400 and not server:
+    elif 400 <= status < 500 and not server and is_short_or_unknown:
         # Very lazy server-timing header parsing. We could parse out the
         # description and the duration, but those don't matter too much here.
         server_timing = {}
@@ -204,9 +204,7 @@ def maybe_bad_capture(version) -> bool:
         #
         # (Unfortunately, can't find any examples of good cache hits.)
         if (
-            status < 500
-            and is_short_or_unknown
-            and 'ak_p' in server_timing
+            'ak_p' in server_timing
             and 'cdn-cache' in server_timing
             # Expect no origin info (since WAF will have never hit the origin)
             # and single-digit milliseconds at the edge.
