@@ -101,9 +101,6 @@ def maybe_bad_capture(version) -> bool:
     if status == 200 and content_length == 0:
         status = 500
 
-    if status < 400:
-        return False
-
     server = headers.get('server', '').lower()
 
     no_cache = False
@@ -129,14 +126,14 @@ def maybe_bad_capture(version) -> bool:
     content_type = version['media_type'] or headers.get('content-type', '')
     is_html = content_type.startswith('text/html')
 
-    if server.startswith('awselb/') and is_short_or_unknown and is_html:
+    if status >= 400 and server.startswith('awselb/') and is_short_or_unknown and is_html:
         # TODO: Keeping these separate since the 403 is more concretely a bad
         # capture, but 502/503/504 gateway errors are more debatable.
         if status == 403:
             return True
         else:
             return True
-    elif server == 'akamaighost' and is_short_or_unknown and no_cache:
+    elif status >= 400 and server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
     elif server == 'cloudfront':
         # TODO: Keeping these branches separate b/c the challenge response is
@@ -147,15 +144,15 @@ def maybe_bad_capture(version) -> bool:
             return True
         # We're pretty confident CloudFront will never return a 404 as part of
         # its own WAF (it will return a 403). 404s only come from the origin.
-        elif cache_error and status != 404:
+        elif cache_error and status >= 400 and status != 404:
             return True
     elif server == 'cloudflare':
         # NOTES: When Cloudflare provides `server-timing`, it will identify its
         # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
-        # but no record of origin time is also good hint of WAF behavior.
+        # but no record of origin time may also be a good hint of WAF behavior.
         if headers.get('cf-mitigated', '').lower() == 'challenge':
             return True
-    elif not server:
+    elif status >= 400 and not server:
         # Very lazy server-timing header parsing. We could parse out the
         # description and the duration, but those don't matter too much here.
         server_timing = {}
