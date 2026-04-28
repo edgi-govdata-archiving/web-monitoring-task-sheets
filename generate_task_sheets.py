@@ -14,7 +14,9 @@ from dateutil.tz import tzutc
 import gzip
 from itertools import islice
 import json
+import logging
 from pathlib import Path
+import re
 from retry import retry
 import signal
 import sys
@@ -27,6 +29,8 @@ from web_monitoring.utils import QuitSignal
 
 
 ResultItem: TypeAlias = tuple[dict, dict | None, Exception | None]
+
+logger = logging.getLogger(__name__)
 
 
 def list_all_pages(url_pattern, after, before, tags=None, cancel=None, client=None, total=False):
@@ -100,9 +104,6 @@ def maybe_bad_capture(version) -> bool:
     if status == 200 and content_length == 0:
         status = 500
 
-    if status < 400:
-        return False
-
     server = headers.get('server', '').lower()
 
     no_cache = False
@@ -128,21 +129,90 @@ def maybe_bad_capture(version) -> bool:
     content_type = version['media_type'] or headers.get('content-type', '')
     is_html = content_type.startswith('text/html')
 
-    if server.startswith('awselb/') and is_short_or_unknown and is_html:
-        return True
-    elif server == 'akamaighost' and is_short_or_unknown and no_cache:
+    # AWS WAF sends the `x-amzn-waf-action` header for a lot of blocking
+    # actions. It can come from different servers, so should be handled on its
+    # own as a clear, concrete signal.
+    if waf_action := headers.get('x-amzn-waf-action', '').lower():
+        if waf_action in ('challenge', 'captcha'):
+            return True
+        else:
+            logger.warning(f'Unknown value for x-amzn-waf-action header: "{waf_action}"')
+
+    if cf_mitigated := headers.get('cf-mitigated', '').lower():
+        if server == 'cloudflare':
+            if cf_mitigated == 'challenge':
+                return True
+            else:
+                logger.warning(f'Unknown value for cf-mitigated header: "{cf_mitigated}"')
+        else:
+            # We expect cf-mitigated to always come alongside a server header
+            # for Cloudflare, unlike with AWS WAF above.
+            logger.warning(
+                'Unknown `server` for cf-mitigated header: '
+                f'"server: {server}", "cf-mitigated: {cf_mitigated}" '
+                '(expected "server: cloudflare")'
+            )
+
+    if status >= 400 and server.startswith('awselb/'):
+        # We assume that blocking-related status code coming from directly from
+        # an AWS ELB and not the origin server is really blocking.
+        if status == 429:
+            return True
+        elif status == 403 and is_short_or_unknown:
+            return True
+        # Keeping these more fuzzy rules for other errors (e.g. 502/503/504
+        # gateway errors) that are more iffy (a gateway error could be
+        # intermittent, or it could be that the underlying origin server was
+        # shut down) separate from the more concrete ones above. We probably
+        # wouldn't want to fail to *record* these when importing even though we
+        # want to treat them as suspect for task sheets.
+        # TODO: in future where we return floats or something non-binary, these
+        # should be lower-confidence.
+        elif is_short_or_unknown and is_html:
+            return True
+    elif status >= 400 and server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
     elif server == 'cloudfront':
-        # TODO: Keeping these branches separate b/c the challenge response is
-        # *definitely* a bad capture, while the cache_error is only probably.
-        # In the future, we may refactor this function to return a float
-        # indicating probable badness instead of a boolean.
-        if headers.get('x-amzn-waf-action', '').lower() == 'challenge':
+        # We're pretty confident CloudFront will never return a 404 as part of
+        # its own WAF (it will return a 403). 404s only come from the origin.
+        # Still... this is low confidence.
+        if cache_error and status >= 400 and status != 404:
             return True
-        elif cache_error:
-            return True
-    elif server == 'cloudflare':
-        if headers.get('cf-mitigated', '').lower() == 'challenge':
+    # elif server == 'cloudflare':
+    #     # We don't have any special hints for Cloudlare beyond the cf-mitigated
+    #     # header, which is already handled above.
+    #     # NOTES: When Cloudflare provides `server-timing`, it will identify its
+    #     # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
+    #     # but no record of origin time may also be a good hint of WAF behavior.
+    #     ...
+    elif 400 <= status < 500 and not server and is_short_or_unknown:
+        # Very lazy server-timing header parsing. We could parse out the
+        # description and the duration, but those don't matter too much here.
+        server_timing = {}
+        for item in headers.get('server-timing', '').split(','):
+            key, _, value = item.partition(';')
+            server_timing[key.lower().strip()] = value.strip()
+
+        # Akamai Edgesuite doesn't explicitly identify itself, but it seems to
+        # always include recognizable server-timing features and a 4xx status.
+        #
+        # Example good capture:
+        #   server-timing: cdn-cache; desc=MISS, edge; dur=22, origin; dur=369, ak_p; desc="1776475897753_386075716_3264768070_38998_7536_11_0_255";dur=1
+        #
+        # Example bad capture:
+        #   server-timing: cdn-cache; desc=HIT, edge; dur=1, ak_p; desc="1775872487192_399532111_2052555389_12_6012_263_573_-";dur=1
+        #
+        # (Unfortunately, can't find any examples of good cache hits.)
+        if (
+            'ak_p' in server_timing
+            and 'cdn-cache' in server_timing
+            # Expect no origin info (since WAF will have never hit the origin)
+            # and single-digit milliseconds at the edge.
+            and 'origin' not in server_timing
+            and re.search(r'(^|;)\s*dur=\d(\.|$)', server_timing.get('edge', ''))
+        ):
+            # NOTE: If we switch to returning a float, this should probably be
+            # slightly less than complete confidence because it's so fuzzy.
             return True
     # TODO: see if we have any Azure CDN examples?
     # TODO: More general heuristics?
@@ -479,6 +549,8 @@ def timeframe_date(date_string):
 
 
 if __name__ == '__main__':
+    logging.basicConfig()
+
     import argparse
     parser = argparse.ArgumentParser(description='Count term changes in monitored pages.')
     parser.add_argument('--output', type=Path, help='Output CSV files in this directory')
