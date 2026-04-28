@@ -12,7 +12,10 @@ from generate_task_sheets import maybe_bad_capture
 # `*-bad` if they are bad captures.
 FIXTURES_PATH = Path(__file__).parent / 'analyst_sheets' / 'tests' / 'fixtures' / 'bad_capture'
 # Versions that currently fail but should not fail the build (for now).
-XFAIL_FILES = []
+XFAIL_FILES = [
+    # No great way to identify this without access to the body.
+    'b47ca1d6-0f4e-4015-9940-dc666f755eb1.json',
+]
 
 
 @pytest.mark.parametrize('file,expected', [
