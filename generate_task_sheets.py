@@ -126,12 +126,22 @@ def maybe_bad_capture(version) -> bool:
     content_type = version['media_type'] or headers.get('content-type', '')
     is_html = content_type.startswith('text/html')
 
-    if status >= 400 and server.startswith('awselb/') and is_short_or_unknown and is_html:
-        # TODO: Keeping these separate since the 403 is more concretely a bad
-        # capture, but 502/503/504 gateway errors are more debatable.
-        if status == 403:
+    if status >= 400 and server.startswith('awselb/'):
+        # We assume that blocking-related status code coming from directly from
+        # an AWS ESB and not the origin server is really blocking.
+        if status == 429:
             return True
-        else:
+        elif status == 403 and is_short_or_unknown:
+            return True
+        # Keeping these more fuzzy rules for other errors (e.g. 502/503/504
+        # gateway errors) that are more iffy (a gateway error could be
+        # intermittent, or it could be that the underlying origin server was
+        # shut down) separate from the more concrete ones above. We probably
+        # wouldn't want to fail to *record* these when importing even though we
+        # want to treat them as suspect for task sheets.
+        # TODO: in future where we return floats or something non-binary, these
+        # should be lower-confidence.
+        elif is_short_or_unknown and is_html:
             return True
     elif status >= 400 and server == 'akamaighost' and is_short_or_unknown and no_cache:
         return True
