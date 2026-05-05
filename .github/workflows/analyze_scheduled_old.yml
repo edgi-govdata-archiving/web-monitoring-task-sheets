@@ -30,3 +30,4 @@ jobs:
       readability: false
       deep: false
       upload_folder: '${{ needs.prepare.outputs.folder_name }}'
+    secrets: inherit

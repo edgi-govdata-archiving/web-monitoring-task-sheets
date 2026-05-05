@@ -21,6 +21,7 @@ jobs:
     needs:
       - prepare
     uses: ./.github/workflows/analyze.yml
+    secrets: inherit
     with:
       threshold: '0.25'
       pattern: '*'
