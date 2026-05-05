@@ -1,0 +1,32 @@
+name: Weekly Analysis
+
+on:
+  schedule:
+    # Tuesday at 4pm UTC/9am PT
+    - cron: '40 16 * * 2'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      folder_name: ${{ steps.folder_name.outputs.name }}
+    steps:
+      - name: Determine Folder Name
+        id: folder_name
+        run: |
+          FOLDER_NAME="Scanner-sheets-$(date +'%Y-%m-%d')"
+          echo "name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    needs:
+      - prepare
+    uses: ./.github/workflows/analyze.yml
+    with:
+      threshold: '0.25'
+      pattern: '*'
+      # tag:
+      from: '268'
+      to: '0'
+      readability: false
+      deep: true
+      upload_folder: '${{ needs.prepare.outputs.folder_name }}'
