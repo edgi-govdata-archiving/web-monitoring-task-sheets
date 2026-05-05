@@ -2,35 +2,24 @@
 Tools to analyze a page.
 """
 
-import concurrent.futures
-import multiprocessing
-from .normalize import normalize_html, normalize_text, normalize_url, get_main_content
-from surt import surt
-import sys
-from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
-                    parallel, parse_html_readability, ActivityMonitor)
-from .terms import KEY_TERMS, KEY_TERM_GRAMS
-from toolz.itertoolz import concat
-import threading
-import traceback
-
 from collections import Counter
-from contextlib import contextmanager
-import concurrent.futures
-import functools
 import hashlib
 from http import HTTPStatus
 import json
 import math
 import os.path
 import re
-import sys
+from surt import surt
+import traceback
 from urllib.parse import urljoin, urlsplit
 from web_monitoring_diff import (html_source_diff, html_text_diff,
                                  links_diff_json)
+from .normalize import (normalize_html, normalize_text, normalize_url,
+                        get_main_content)
+from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
+                    parallel, parse_html_readability, ActivityMonitor)
+from .terms import KEY_TERMS, KEY_TERM_GRAMS
 
-import signal
-from web_monitoring.utils import Signal
 
 SKIP_READABILITY_URLS = frozenset((
     'cdc.gov/',
@@ -167,8 +156,8 @@ def analyze_text(page, a, b, use_readability=True):
     # Check whether our readability fallback would work.
     # We always do this (rather than only as a fallback) so we can debug issues
     # with it by reporting any URLs that would have failed.
-    text_a = a['normalized']
-    text_b = b['normalized']
+    text_a = get_body_normalized(a)
+    text_b = get_body_normalized(b)
     content_a, readable_a = get_main_content(text_a)
     content_b, readable_b = get_main_content(text_b)
     found_content_area = bool(content_a and content_b)
@@ -179,16 +168,16 @@ def analyze_text(page, a, b, use_readability=True):
         not any(item in page['url'] for item in SKIP_READABILITY_URLS)
     ):
         with ActivityMonitor(f'load readable content for {page["uuid"]}'):
-            response_a, response_b = parallel((parse_html_readability, a['response'].text, a['url']),
-                                              (parse_html_readability, b['response'].text, b['url']))
+            response_a, response_b = parallel((parse_html_readability, get_body_text(a), a['url']),
+                                              (parse_html_readability, get_body_text(b), b['url']))
         # parse_html_readability returns None if the content couldn't be parsed by
         # readability. If either one of the original documents couldn't be parsed,
         # fall back to straight HTML text for *both* (we want what we're diffing to
         # conceptually match up).
         if response_a and response_b:
             readable = True
-            text_a = '\n'.join(normalize_text(line) for line in response_a.text.split('\n'))
-            text_b = '\n'.join(normalize_text(line) for line in response_b.text.split('\n'))
+            text_a = '\n'.join(normalize_text(line) for line in response_a.split('\n'))
+            text_b = '\n'.join(normalize_text(line) for line in response_b.split('\n'))
             raw_diff = html_source_diff(text_a, text_b)
 
     if not readable:
@@ -278,7 +267,7 @@ def analyze_text(page, a, b, use_readability=True):
 
 
 def analyze_links(a, b):
-    diff = links_diff_json(a['normalized'], b['normalized'])['diff']
+    diff = links_diff_json(get_body_normalized(a), get_body_normalized(b))['diff']
     diff_changes = [item for item in diff if item[0] != 0]
 
     a_url = normalize_url(a['url'], a['url'])
@@ -299,7 +288,7 @@ def analyze_links(a, b):
 def analyze_source(a, b):
     # EXPERIMENT: use normalized HTML for analysis.
     # diff = html_source_diff(a['response'].text, b['response'].text)['diff']
-    diff = html_source_diff(a['normalized'], b['normalized'])['diff']
+    diff = html_source_diff(get_body_normalized(a), get_body_normalized(b))['diff']
     diff_changes = [item for item in diff if item[0] != 0]
     return dict(
         diff_hash=hash_changes(diff_changes),
@@ -486,7 +475,7 @@ META_REFRESH_URL_PATTERN = re.compile(r'content="\d+(\.\d*)?;\s*url=([^"]+)"')
 
 
 def get_client_redirect(version):
-    match = META_REFRESH_PATTERN.search(version['response'].text)
+    match = META_REFRESH_PATTERN.search(get_body_text(version))
     if match:
         url_match = META_REFRESH_URL_PATTERN.search(match.group(0))
         if url_match:
@@ -545,6 +534,22 @@ def priority_factor(ratio):
     return math.log(1 + (math.e - 1) * ratio)
 
 
+def get_body_text(version: dict) -> str:
+    if '_body_text' not in version:
+        response = load_url(version['body_url'])
+        version['_body_text'] = response.text
+
+    return version['_body_text']
+
+
+def get_body_normalized(version: dict) -> str:
+    if '_body_normalized' not in version:
+        html = normalize_html(get_body_text(version), version['url'])
+        version['_body_normalized'] = html
+
+    return version['_body_normalized']
+
+
 def analyze_page(page, after, before, use_readability=True):
     """
     Analyze a page from web-monitoring-db and return information about how the
@@ -560,10 +565,11 @@ def analyze_page(page, after, before, use_readability=True):
     a = page['versions'][len(page['versions']) - 1]
     b = page['versions'][0]
     with ActivityMonitor(f'load raw content for {page["uuid"]}'):
-        a['response'], b['response'] = parallel((load_url, a['body_url']),
-                                                (load_url, b['body_url']))
-    a['normalized'] = normalize_html(a['response'].text, a['url'])
-    b['normalized'] = normalize_html(b['response'].text, b['url'])
+        # Preload raw HTML bodies.
+        parallel((get_body_text, a), (get_body_text, b))
+        # Pre-normalize (normalize modifies global state; is not thread-safe).
+        get_body_normalized(a)
+        get_body_normalized(b)
 
     link_analysis = analyze_links(a, b)
     if link_analysis['diff_length'] > 0:
@@ -646,45 +652,3 @@ def work_page(after, before, use_readability, page):
             error.traceback = traceback.format_tb(error.__traceback__)
         # TODO: add option for more detailed logging
         return (page, None, error)
-
-
-def setup_worker():
-    # Ignore sigint because the main process is handling it.
-    # Total abuse of the context manager protocol :\
-    handler = Signal((signal.SIGINT,), signal.SIG_IGN)
-    handler.__enter__()
-
-
-def analyze_pages(pages, after, before, use_readability=True, parallel=None, cancel=None):
-    """
-    Analyze a set of pages in parallel across multiple processes. Yields tuples
-    for each page with:
-    0. The page
-    1. The analysis (or `None` if analysis failed)
-    2. An exception if analysis failed or `None` if it succeeded. This will be
-       an instance of `AnalyzableError` if the page or versions were not of a
-       type that this module can actually analyze.
-    """
-    parallel = parallel or multiprocessing.cpu_count()
-    # Python 3.8 does sets start method by platform like this by default. This
-    # is just backporting that behavior. (Fork seems to occasionally cause real
-    # issues with threading on MacOS.)
-    method = sys.platform == 'darwin' and 'spawn' or 'fork'
-    context = multiprocessing.get_context(method)
-    with context.Pool(parallel, setup_worker, maxtasksperchild=100) as pool:
-        if cancel:
-            close_on_event(pool, cancel)
-
-        work = functools.partial(work_page, after, before, use_readability)
-        yield from pool.imap_unordered(work, pages)
-        pool.close()
-
-
-def close_on_event(pool, event):
-    def wait_and_close():
-        event.wait()
-        pool.close()
-
-    thread = threading.Thread(target=wait_and_close, daemon=True)
-    thread.start()
-    return thread
