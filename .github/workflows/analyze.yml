@@ -5,11 +5,8 @@ env:
 
 on:
   pull_request: {}
-  schedule:
-    # Tuesday at 4pm UTC/9am PT
-    - cron: '40 16 * * 2'
-  workflow_dispatch:
-    inputs:
+  workflow_call:
+    inputs: &standard_inputs
       threshold:
         description: 'Threshold'
         required: false
@@ -49,16 +46,18 @@ on:
         required: false
         type: string
         default: ''
+  workflow_dispatch:
+    inputs: *standard_inputs
 
 jobs:
   analyze:
     env:
-      DEFAULT_PATTERN: ${{ github.event_name == 'schedule' && '*' || '*justice.gov/*' }}
+      DEFAULT_PATTERN: '*justice.gov/*'
       DEFAULT_THRESHOLD: '0.25'
-      DEFAULT_FROM: ${{ github.event_name == 'schedule' && '268' || '240' }}
+      DEFAULT_FROM: '240'
       DEFAULT_TO: '0'
       USE_READABILITY: ${{ inputs.readability && 'true' || 'false' }}
-      DEEP: ${{ github.event_name == 'schedule' && 'true' || (inputs.deep && 'true' || 'false') }}
+      DEEP: ${{ inputs.deep && 'true' || 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -129,7 +128,7 @@ jobs:
           retention-days: 7
 
   upload:
-    if: inputs.upload_folder || github.event_name == 'schedule'
+    if: inputs.upload_folder
     needs:
       - analyze
     runs-on: ubuntu-latest
@@ -159,9 +158,6 @@ jobs:
         id: upload
         run: |
           FOLDER_NAME='${{ inputs.upload_folder }}'
-          if [ -z "${FOLDER_NAME}" ]; then
-            FOLDER_NAME="Scanner-sheets-$(date +'%Y-%m-%d')"
-          fi
           rclone copy --config rclone.conf out "gdrive-task-sheets:${FOLDER_NAME}"
           echo "folder_name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
 
