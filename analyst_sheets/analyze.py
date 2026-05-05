@@ -2,35 +2,24 @@
 Tools to analyze a page.
 """
 
-import concurrent.futures
-import multiprocessing
-from .normalize import normalize_html, normalize_text, normalize_url, get_main_content
-from surt import surt
-import sys
-from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
-                    parallel, parse_html_readability, ActivityMonitor)
-from .terms import KEY_TERMS, KEY_TERM_GRAMS
-from toolz.itertoolz import concat
-import threading
-import traceback
-
 from collections import Counter
-from contextlib import contextmanager
-import concurrent.futures
-import functools
 import hashlib
 from http import HTTPStatus
 import json
 import math
 import os.path
 import re
-import sys
+from surt import surt
+import traceback
 from urllib.parse import urljoin, urlsplit
 from web_monitoring_diff import (html_source_diff, html_text_diff,
                                  links_diff_json)
+from .normalize import (normalize_html, normalize_text, normalize_url,
+                        get_main_content)
+from .tools import (CharacterToWordDiffs, changed_ngrams, load_url,
+                    parallel, parse_html_readability, ActivityMonitor)
+from .terms import KEY_TERMS, KEY_TERM_GRAMS
 
-import signal
-from web_monitoring.utils import Signal
 
 SKIP_READABILITY_URLS = frozenset((
     'cdc.gov/',
@@ -663,45 +652,3 @@ def work_page(after, before, use_readability, page):
             error.traceback = traceback.format_tb(error.__traceback__)
         # TODO: add option for more detailed logging
         return (page, None, error)
-
-
-def setup_worker():
-    # Ignore sigint because the main process is handling it.
-    # Total abuse of the context manager protocol :\
-    handler = Signal((signal.SIGINT,), signal.SIG_IGN)
-    handler.__enter__()
-
-
-def analyze_pages(pages, after, before, use_readability=True, parallel=None, cancel=None):
-    """
-    Analyze a set of pages in parallel across multiple processes. Yields tuples
-    for each page with:
-    0. The page
-    1. The analysis (or `None` if analysis failed)
-    2. An exception if analysis failed or `None` if it succeeded. This will be
-       an instance of `AnalyzableError` if the page or versions were not of a
-       type that this module can actually analyze.
-    """
-    parallel = parallel or multiprocessing.cpu_count()
-    # Python 3.8 does sets start method by platform like this by default. This
-    # is just backporting that behavior. (Fork seems to occasionally cause real
-    # issues with threading on MacOS.)
-    method = sys.platform == 'darwin' and 'spawn' or 'fork'
-    context = multiprocessing.get_context(method)
-    with context.Pool(parallel, setup_worker, maxtasksperchild=100) as pool:
-        if cancel:
-            close_on_event(pool, cancel)
-
-        work = functools.partial(work_page, after, before, use_readability)
-        yield from pool.imap_unordered(work, pages)
-        pool.close()
-
-
-def close_on_event(pool, event):
-    def wait_and_close():
-        event.wait()
-        pool.close()
-
-    thread = threading.Thread(target=wait_and_close, daemon=True)
-    thread.start()
-    return thread
