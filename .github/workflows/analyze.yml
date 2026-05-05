@@ -58,6 +58,7 @@ jobs:
       DEFAULT_FROM: ${{ github.event_name == 'schedule' && '268' || '240' }}
       DEFAULT_TO: '0'
       USE_READABILITY: ${{ inputs.readability && 'true' || 'false' }}
+      DEEP: ${{ github.event_name == 'schedule' && 'true' || (inputs.deep && 'true' || 'false') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -104,7 +105,7 @@ jobs:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
           TAG_OPTIONS: ${{ inputs.tag && format('--tag ''{0}''', inputs.tag) || '' }}
-          DEEP_OPTIONS: ${{ inputs.deep && '--deep' || '' }}
+          DEEP_OPTIONS: ${{ env.DEEP && '--deep' || '' }}
         run: |
           echo "Tag options: '${TAG_OPTIONS}'"
           echo "Readability options: '${READABILITY_OPTIONS}'"
