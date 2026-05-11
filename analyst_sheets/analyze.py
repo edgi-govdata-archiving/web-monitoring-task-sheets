@@ -330,8 +330,8 @@ def get_version_status(version: dict) -> int:
     redirects, _, _ = get_redirects(version)
     if (
         redirects
-        and urlsplit(url).path != '/'
-        and surt(urljoin(url, '/')) == surt(redirects[-1])
+        and not is_home_path(urlsplit(url).path)
+        and is_home_path(surt(redirects[-1]).split(')', 1)[1])
     ):
         return 404
 
@@ -520,12 +520,15 @@ def analyze_redirects(page, a, b):
     }
 
 
-ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
+ROOT_PAGE_PATTERN = re.compile(r'^/((index|home)(\.\w+)?)?$')
 
 
-def is_home_page(page):
-    url_path = urlsplit(page['url']).path
-    return True if ROOT_PAGE_PATTERN.match(url_path) else False
+def is_home_path(path: str) -> bool:
+    return True if ROOT_PAGE_PATTERN.match(path) else False
+
+
+def is_home_page(page: dict) -> bool:
+    return is_home_path(urlsplit(page['url']).path)
 
 
 # Calculate a multiplier for priority based on a ratio representing the amount
