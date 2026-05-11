@@ -75,3 +75,24 @@ class TestGetVersionStatus:
             'headers': {},
             '_body_text': EMPTY_HTML,
         })
+
+    def test_redirects_to_root_across_domains_are_ok(self):
+        # Redirect to "/".
+        assert 200 == get_version_status({
+            'url': 'https://waterdata.usgs.gov/nwis',
+            'status': 200,
+            'source_metadata': {
+                'statuses': [
+                    '301',
+                    '200'
+                ],
+                'redirects': [
+                    'https://waterdata.usgs.gov/nwis',
+                    'https://www.usgs.gov/',
+                ],
+                'redirected_url': 'https://www.usgs.gov/',
+            },
+            'title': 'USGS Water Data for the Nation',
+            'headers': {},
+            '_body_text': EMPTY_HTML,
+        })
