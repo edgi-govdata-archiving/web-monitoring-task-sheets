@@ -328,12 +328,11 @@ def get_version_status(version: dict) -> int:
     # Redirects from a non-root page to the root are effectively 404s.
     url = version['url']
     redirects, _, _ = get_redirects(version)
-    if (
-        redirects
-        and urlsplit(url).path != '/'
-        and surt(urljoin(url, '/')) == surt(redirects[-1])
-    ):
-        return 404
+    if redirects and not is_home_path(urlsplit(url).path):
+        redirect_host, _, redirect_path = surt(redirects[-1]).partition(')')
+        original_host = surt(url).split(')', 1)[0]
+        if is_home_path(redirect_path) and redirect_host == original_host:
+            return 404
 
     # Special case for the EPA "signpost" page, where they redirected hundreds
     # of climate-related pages to instead of giving them 4xx status codes.
@@ -520,12 +519,15 @@ def analyze_redirects(page, a, b):
     }
 
 
-ROOT_PAGE_PATTERN = re.compile(r'^/(index(\.\w+)?)?$')
+ROOT_PAGE_PATTERN = re.compile(r'^/((index|home)(\.\w+)?)?$')
 
 
-def is_home_page(page):
-    url_path = urlsplit(page['url']).path
-    return True if ROOT_PAGE_PATTERN.match(url_path) else False
+def is_home_path(path: str) -> bool:
+    return True if ROOT_PAGE_PATTERN.match(path) else False
+
+
+def is_home_page(page: dict) -> bool:
+    return is_home_path(urlsplit(page['url']).path)
 
 
 # Calculate a multiplier for priority based on a ratio representing the amount
