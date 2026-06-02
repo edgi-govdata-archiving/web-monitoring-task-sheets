@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 def main(url: str = '*', tags: list[str] = []) -> None:
     before = datetime.now(tz=timezone.utc)
-    after = before - timedelta(days=14)
+    after = before - timedelta(days=7)
 
     pages = list_all_pages(url, after=None, before=None, tags=tags, total=True)
     count = next(pages)
