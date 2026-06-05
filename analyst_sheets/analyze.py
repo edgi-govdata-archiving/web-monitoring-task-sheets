@@ -325,7 +325,8 @@ def get_version_status(version: dict) -> int:
     if status >= 400:
         return status
 
-    # Redirects from a non-root page to the root are effectively 404s.
+    # Try to identify error sinks (redirects to a new URL for the error page,
+    # rather than just responding with an error).
     url = version['url']
     redirects, _, _ = get_redirects(version)
     if redirects:
