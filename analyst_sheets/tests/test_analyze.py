@@ -1,4 +1,3 @@
-import pytest
 from ..analyze import get_version_status
 
 
@@ -90,7 +89,6 @@ class TestGetVersionStatus:
             title='Climate Change - NASA Science',
         ))
 
-    @pytest.mark.xfail
     def test_special_federal_register_unblock(self):
         # https://api.monitoring.envirodatagov.org/api/v0/versions/bcf36392-8b37-4dcc-b4a2-9f62c5effb18
         assert 429 == get_version_status(dummy_version(
