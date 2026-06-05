@@ -229,6 +229,17 @@ def maybe_bad_capture(version) -> bool:
     #     x_cache = headers.get('x-cache', '').lower()
     #     cache_miss = x_cache and not x_cache.startswith('hit')
     #     return content_type.startswith('text/html') and is_short_or_unknown and cache_miss
+
+    # Special cases for redirects to known sinks that represent crawl blocking.
+    redirects = version['source_metadata'].get('redirects')
+    if status == 200 and isinstance(redirects, (list, tuple)):
+        block_url = 'unblock.federalregister.gov/'
+        if (
+            re.sub(r'^https?://', '', redirects[-1].lower()) == block_url
+            and re.sub(r'^https?://', '', version['url'].lower()) != block_url
+        ):
+            return True
+
     return False
 
 
