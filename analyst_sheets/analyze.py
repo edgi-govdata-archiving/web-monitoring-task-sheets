@@ -325,28 +325,38 @@ def get_version_status(version: dict) -> int:
     if status >= 400:
         return status
 
-    # Redirects from a non-root page to the root are effectively 404s.
+    # Try to identify error sinks (redirects to a new URL for the error page,
+    # rather than just responding with an error).
     url = version['url']
     redirects, _, _ = get_redirects(version)
-    if redirects and not is_home_path(urlsplit(url).path):
-        redirect_host, _, redirect_path = surt(redirects[-1]).partition(')')
-        original_host = surt(url).split(')', 1)[0]
-        if is_home_path(redirect_path) and redirect_host == original_host:
+    if redirects:
+        surt_url = surt(url)
+        surt_destination = surt(redirects[-1])
+
+        # Redirects from a non-root page to the same host's root are almost
+        # always effectively 404s.
+        original_host, _, original_path = surt_url.partition(')')
+        destination_host, _, destination_path = surt_destination.partition(')')
+        if (
+            original_host == destination_host
+            and not is_home_path(original_path)
+            and is_home_path(destination_path)
+        ):
             return 404
 
-    # Special case for the EPA "signpost" page, where they redirected hundreds
-    # of climate-related pages to instead of giving them 4xx status codes.
-    if redirects and redirects[-1].endswith('epa.gov/sites/production/files/signpost/cc.html'):
-        return 404
+        # Special cases of well-known error sinks in our data.
+        if surt_url != surt_destination:
+            if surt_destination == 'gov,epa)/sites/production/files/signpost/cc.html':
+                return 404
 
-    # Special case for climate.nasa.gov getting moved with bad redirects for
-    # all the sub-pages (they all redirected to the new home page).
-    if (
-        redirects
-        and re.match(r'^https?://climate.nasa.gov/.+$', url, re.IGNORECASE)
-        and redirects[-1].endswith('://science.nasa.gov/climate-change/')
-    ):
-        return 404
+            if (
+                original_host == 'gov,nasa,climate'
+                and surt_destination == 'gov,nasa,science)/climate-change'
+            ):
+                return 404
+
+            if surt_destination == 'gov,federalregister,unblock)/':
+                return 429
 
     if version['title']:
         # Page titles are frequently formulated like "<title> | <site name>" or
@@ -473,7 +483,7 @@ META_REFRESH_PATTERN = re.compile(r'<meta[^>]+http-equiv="refresh"[^>]*')
 META_REFRESH_URL_PATTERN = re.compile(r'content="\d+(\.\d*)?;\s*url=([^"]+)"')
 
 
-def get_client_redirect(version):
+def get_client_redirect(version) -> str | None:
     match = META_REFRESH_PATTERN.search(get_body_text(version))
     if match:
         url_match = META_REFRESH_URL_PATTERN.search(match.group(0))
@@ -483,7 +493,7 @@ def get_client_redirect(version):
     return None
 
 
-def get_redirects(version):
+def get_redirects(version) -> tuple[list[str], list[str], str | None]:
     server = version['source_metadata'].get('redirects') or []
     if not isinstance(server, (list, tuple)):
         raise ValueError(f'Unknown type for redirects on version: {version}')
