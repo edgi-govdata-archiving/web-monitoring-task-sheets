@@ -439,7 +439,7 @@ def write_redirect_change_summary(output_path: Path, results: Iterable[PageAnaly
         ])
         sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
         for sheet_name, sheet_results in sheet_groups.items():
-            category, domain = sheet_name.rsplit('--', 1)
+            category, _, domain = sheet_name.rpartition('--')
             for result in sorted(sheet_results, key=lambda r: r.page['url']):
                 analysis = result.overall and result.overall['redirect']
                 if not analysis or not analysis['change_type']:
@@ -495,7 +495,7 @@ def write_redirect_current_summary(output_path: Path, results: Iterable[PageAnal
         ])
         sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
         for sheet_name, sheet_results in sheet_groups.items():
-            category, domain = sheet_name.rsplit('--', 1)
+            category, _, domain = sheet_name.rpartition('--')
             for result in sorted(sheet_results, key=lambda r: r.page['url']):
                 if not result.overall:
                     continue
