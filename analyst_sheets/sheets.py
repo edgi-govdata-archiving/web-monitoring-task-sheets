@@ -144,7 +144,7 @@ def format_row(page, timeframe, analysis, error, index, name, timestamp, overall
             format(analysis['links']['diff_ratio'], '.3f'),
             analysis['links']['removed_self_link'],
             analysis['redirect']['is_client_redirect'] or '',
-            analysis['redirect']['changed'] or '',
+            analysis['redirect']['change_type'] or '',
             format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
             format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
         ])
