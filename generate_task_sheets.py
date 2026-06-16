@@ -24,7 +24,7 @@ from typing import Iterable
 from tqdm import tqdm
 import threading
 import traceback
-from web_monitoring.utils import QuitSignal, Signal
+from web_monitoring.utils import QuitSignal, Signal, estimate_version_quality
 
 
 logger = logging.getLogger('task_sheets')
@@ -96,153 +96,6 @@ def list_page_versions(page_id, after, before, chunk_size=1000, cancel=None,
                                        chunk_size=1))
 
 
-def maybe_bad_capture(version) -> bool:
-    """
-    Identify captures that are likely to have been blocked responses (e.g.
-    a rate limit or firewall rule blocked the crawler) or intermittent errors.
-    These don't represent what a regular user should have seen at the time, so
-    we should avoid using them as candidates for comparison.
-    """
-    headers = {k.lower(): v for k, v in (version['headers'] or {}).items()}
-    content_length = version['content_length']
-    if content_length is None:
-        content_length = int(headers.get('content-length', '-1'))
-
-    status = version['status'] or 200
-    if status == 200 and content_length == 0:
-        status = 500
-
-    server = headers.get('server', '').lower()
-
-    no_cache = False
-    if 'cache-control' in headers:
-        cache_control = headers['cache-control'].lower()
-        if 'no-cache' in cache_control:
-            no_cache = True
-        elif 'max-age=0' in cache_control:
-            no_cache = True
-    if no_cache is False and 'expires' in headers:
-        expires = dateutil.parser.parse(headers['expires'])
-        request_time = (
-            dateutil.parser.parse(headers['date'])
-            if 'date' in headers
-            else version['capture_time']
-        )
-        no_cache = (expires - request_time).total_seconds() < 60
-
-    x_cache = headers.get('x-cache', '').lower()
-    cache_error = 'error' in x_cache or 'n/a' in x_cache
-
-    is_short_or_unknown = content_length < 1000
-    content_type = version['media_type'] or headers.get('content-type', '')
-    is_html = content_type.startswith('text/html')
-
-    # AWS WAF sends the `x-amzn-waf-action` header for a lot of blocking
-    # actions. It can come from different servers, so should be handled on its
-    # own as a clear, concrete signal.
-    if waf_action := headers.get('x-amzn-waf-action', '').lower():
-        if waf_action in ('challenge', 'captcha'):
-            return True
-        else:
-            logger.warning(f'Unknown value for x-amzn-waf-action header: "{waf_action}"')
-
-    if cf_mitigated := headers.get('cf-mitigated', '').lower():
-        if server == 'cloudflare':
-            if cf_mitigated == 'challenge':
-                return True
-            else:
-                logger.warning(f'Unknown value for cf-mitigated header: "{cf_mitigated}"')
-        else:
-            # We expect cf-mitigated to always come alongside a server header
-            # for Cloudflare, unlike with AWS WAF above.
-            logger.warning(
-                'Unknown `server` for cf-mitigated header: '
-                f'"server: {server}", "cf-mitigated: {cf_mitigated}" '
-                '(expected "server: cloudflare")'
-            )
-
-    if status >= 400 and server.startswith('awselb/'):
-        # We assume that blocking-related status code coming from directly from
-        # an AWS ELB and not the origin server is really blocking.
-        if status == 429:
-            return True
-        elif status == 403 and is_short_or_unknown:
-            return True
-        # Keeping these more fuzzy rules for other errors (e.g. 502/503/504
-        # gateway errors) that are more iffy (a gateway error could be
-        # intermittent, or it could be that the underlying origin server was
-        # shut down) separate from the more concrete ones above. We probably
-        # wouldn't want to fail to *record* these when importing even though we
-        # want to treat them as suspect for task sheets.
-        # TODO: in future where we return floats or something non-binary, these
-        # should be lower-confidence.
-        elif is_short_or_unknown and is_html:
-            return True
-    elif status >= 400 and server == 'akamaighost' and is_short_or_unknown and no_cache:
-        return True
-    elif server == 'cloudfront':
-        # We're pretty confident CloudFront will never return a 404 as part of
-        # its own WAF (it will return a 403). 404s only come from the origin.
-        # Still... this is low confidence.
-        if cache_error and status >= 400 and status != 404:
-            return True
-    # elif server == 'cloudflare':
-    #     # We don't have any special hints for Cloudlare beyond the cf-mitigated
-    #     # header, which is already handled above.
-    #     # NOTES: When Cloudflare provides `server-timing`, it will identify its
-    #     # time with `cfEdge` and origin time with `cfOrigin`. Having edge time
-    #     # but no record of origin time may also be a good hint of WAF behavior.
-    #     ...
-    elif 400 <= status < 500 and not server and is_short_or_unknown:
-        # Very lazy server-timing header parsing. We could parse out the
-        # description and the duration, but those don't matter too much here.
-        server_timing = {}
-        for item in headers.get('server-timing', '').split(','):
-            key, _, value = item.partition(';')
-            server_timing[key.lower().strip()] = value.strip()
-
-        # Akamai Edgesuite doesn't explicitly identify itself, but it seems to
-        # always include recognizable server-timing features and a 4xx status.
-        #
-        # Example good capture:
-        #   server-timing: cdn-cache; desc=MISS, edge; dur=22, origin; dur=369, ak_p; desc="1776475897753_386075716_3264768070_38998_7536_11_0_255";dur=1
-        #
-        # Example bad capture:
-        #   server-timing: cdn-cache; desc=HIT, edge; dur=1, ak_p; desc="1775872487192_399532111_2052555389_12_6012_263_573_-";dur=1
-        #
-        # (Unfortunately, can't find any examples of good cache hits.)
-        if (
-            'ak_p' in server_timing
-            and 'cdn-cache' in server_timing
-            # Expect no origin info (since WAF will have never hit the origin)
-            # and single-digit milliseconds at the edge.
-            and 'origin' not in server_timing
-            and re.search(r'(^|;)\s*dur=\d(\.|$)', server_timing.get('edge', ''))
-        ):
-            # NOTE: If we switch to returning a float, this should probably be
-            # slightly less than complete confidence because it's so fuzzy.
-            return True
-    # TODO: see if we have any Azure CDN examples?
-    # TODO: More general heuristics?
-    # else:
-    #     content_type = version['media_type'] or headers.get('content-type', '')
-    #     x_cache = headers.get('x-cache', '').lower()
-    #     cache_miss = x_cache and not x_cache.startswith('hit')
-    #     return content_type.startswith('text/html') and is_short_or_unknown and cache_miss
-
-    # Special cases for redirects to known sinks that represent crawl blocking.
-    redirects = version['source_metadata'].get('redirects')
-    if status == 200 and isinstance(redirects, (list, tuple)):
-        block_url = 'unblock.federalregister.gov/'
-        if (
-            re.sub(r'^https?://', '', redirects[-1].lower()) == block_url
-            and re.sub(r'^https?://', '', version['url'].lower()) != block_url
-        ):
-            return True
-
-    return False
-
-
 def status_error_class(status: int | None) -> int:
     status_class = int((status or 600) / 100)
     return status_class if status_class >= 4 else 0
@@ -299,7 +152,7 @@ def add_versions_to_page(page: dict, after: datetime, before: datetime, candidat
     questionable_versions = []
     for version in candidates:
         if in_time_range(version):
-            if maybe_bad_capture(version):
+            if estimate_version_quality(version) < 1.0:
                 questionable_versions.append(version)
             else:
                 versions.append(version)
@@ -313,11 +166,11 @@ def add_versions_to_page(page: dict, after: datetime, before: datetime, candidat
             # Look back a few more versions and up to N days for a valid
             # baseline version.
             baseline = version
-            if maybe_bad_capture(baseline):
+            if estimate_version_quality(baseline) < 1.0:
                 for candidate in islice(candidates, 100):
                     if (baseline['capture_time'] - candidate['capture_time']).days > 30:
                         break
-                    elif not maybe_bad_capture(candidate):
+                    elif estimate_version_quality(candidate) == 1.0:
                         baseline = candidate
                         break
 
