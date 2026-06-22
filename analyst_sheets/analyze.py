@@ -11,6 +11,7 @@ import os.path
 import re
 from surt import surt
 import traceback
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 from web_monitoring_diff import (html_source_diff, html_text_diff,
                                  links_diff_json)
@@ -503,7 +504,47 @@ def get_redirects(version) -> tuple[list[str], list[str], str | None]:
     return combined, server, client
 
 
-def analyze_redirects(page, a, b):
+# Used for splitting a SURT URL into components relevant to redirect analysis.
+SURT_COMPARISON_SPLIT = re.compile(
+    r"""
+    ^
+    (?P<host>[^)]+)\)  # Host - everything up to the first ")"
+    (?P<path>[^?]*?)/  # Path without last component (everything up to the
+                       #   final "/" before "?" or end)
+    (?P<filename>      # Last path component + optional querystring
+        [^/?]*
+        (?:\?.*)?
+    )
+    $
+    """,
+    re.VERBOSE
+)
+
+
+def url_change_type(a: str, b: str) -> str | None:
+    """
+    Compare two URLs and return a string indicating how they meaningfully
+    differ. If the URLs are effectively the same, this will return ``None``.
+    This considers URLs very loosely, ignoring protocol, case, some
+    querystings, etc.
+    """
+    surt_a = surt(a)
+    surt_b = surt(b)
+    if surt_a == surt_b:
+        return None
+
+    host_a, path_a, _filename_a = SURT_COMPARISON_SPLIT.match(surt_a).groups()
+    host_b, path_b, _filename_b = SURT_COMPARISON_SPLIT.match(surt_b).groups()
+
+    if host_a != host_b:
+        return 'domain'
+    elif path_a != path_b:
+        return 'path'
+    else:
+        return 'name'
+
+
+def analyze_redirects(page, a, b) -> dict[str, Any]:
     a_all, a_server, a_client = get_redirects(a)
     b_all, b_server, b_client = get_redirects(b)
 
@@ -515,11 +556,14 @@ def analyze_redirects(page, a, b):
     elif not a_client and b_client:
         is_client_redirect = 'became redirect'
 
-    final_a = surt(a_all[-1] if len(a_all) else a['url'], reverse_ipaddr=False)
-    final_b = surt(b_all[-1] if len(b_all) else b['url'], reverse_ipaddr=False)
+    change_type = url_change_type(
+        a_all[-1] if len(a_all) else a['url'],
+        b_all[-1] if len(b_all) else b['url'],
+    )
 
     return {
-        'changed': final_a != final_b,
+        'change_type': change_type,
+        'changed': change_type is not None,
         'client_changed': a_client != b_client,
         'is_client_redirect': is_client_redirect,
         'a_server': a_server,
@@ -616,8 +660,11 @@ def analyze_page(page, after, before, use_readability=True):
         priority *= page_status_factor(page, a, b)
 
     redirect_analysis = analyze_redirects(page, a, b)
-    if redirect_analysis['changed']:
-        priority += 0.25
+    if redirect_analysis['change_type'] == 'domain':
+        priority += 1
+    elif redirect_analysis['change_type'] == 'path':
+        priority += 0.5
+    # Other destination change types are not prioritized (name, no change).
 
     # Ensure priority at least matches baseline.
     priority = max(priority, baseline)

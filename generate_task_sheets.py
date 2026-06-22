@@ -1,5 +1,9 @@
 from analyst_sheets import analyze
-from analyst_sheets.sheets import write_csv
+from analyst_sheets.sheets import (
+    write_csv,
+    write_redirect_change_summary,
+    write_redirect_current_summary,
+)
 from analyst_sheets.tools import (
     get_thread_db_client,
     tap
@@ -17,7 +21,6 @@ import logging
 import multiprocessing
 import multiprocessing.pool
 from pathlib import Path
-import re
 import signal
 import sys
 from typing import Iterable
@@ -420,6 +423,18 @@ def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult], deep:
         write_csv(output_path, sheet_name, sorted_results, deep)
 
 
+def write_redirect_sheets(output_path: Path, results: Iterable[PageAnalysisResult]):
+    sorted_results = []
+    result_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
+    for group in sorted(result_groups.keys()):
+        category, _, domain = group.rpartition('--')
+        for item in sorted(result_groups[group], key=lambda r: r.page['url']):
+            sorted_results.append((category, domain, item))
+
+    write_redirect_change_summary(output_path / '_redirects-changed.csv', sorted_results)
+    write_redirect_current_summary(output_path / '_redirects-current.csv', sorted_results)
+
+
 def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, deep=False, verbose=False, use_readability=True):
     with QuitSignal((signal.SIGINT,)) as cancel:
         # Make sure we can actually output the results before getting started.
@@ -482,6 +497,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         ]
         if output_path:
             write_sheets(output_path, filtered, deep)
+            write_redirect_sheets(output_path, results)
         else:
             for result in filtered:
                 pretty_print_analysis(result, output=tqdm)
