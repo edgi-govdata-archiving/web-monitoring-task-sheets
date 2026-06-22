@@ -423,19 +423,20 @@ def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult], deep:
 def write_redirect_change_summary(output_path: Path, results: Iterable[PageAnalysisResult]) -> None:
     # TODO: This is a bit quick-n-dirty; should probably move to sheets.py.
     import csv
-    from analyst_sheets.sheets import format_status
+    from analyst_sheets.sheets import create_view_url, format_redirects, format_status
     with (output_path / '_redirects-changed.csv').open('w') as file:
         writer = csv.writer(file)
         writer.writerow([
-            'UUID',
+            'Scanner',
             'Category',
             'Domain',
             'Status',
             'Redirect Type',
             'Monitored URL',
-            'Redirect Old vs New',
             'Redirect Old',
             'Redirect New',
+            'All Redirects Old',
+            'All Redirects New',
         ])
         sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
         for sheet_name, sheet_results in sheet_groups.items():
@@ -462,15 +463,16 @@ def write_redirect_change_summary(output_path: Path, results: Iterable[PageAnaly
                 b_url = b_all[-1] if len(b_all) else b['url']
 
                 writer.writerow([
-                    result.page['uuid'],
+                    create_view_url(result.page, a, b),
                     category,
                     domain,
                     format_status(result.overall['status_b']),
                     change_type,
                     b['url'],
-                    f'{a_url}\n{b_url}',
                     a_url,
                     b_url,
+                    format_redirects(analysis['a_server'], analysis['a_client']),
+                    format_redirects(analysis['b_server'], analysis['b_client']),
                 ])
 
 
@@ -478,17 +480,15 @@ def write_redirect_current_summary(output_path: Path, results: Iterable[PageAnal
     # TODO: This is a bit quick-n-dirty; should probably move to sheets.py.
     import csv
     from analyst_sheets.analyze import get_redirects, url_change_type
-    from analyst_sheets.sheets import format_redirects, format_status
+    from analyst_sheets.sheets import create_view_url, format_redirects, format_status
     with (output_path / '_redirects-current.csv').open('w') as file:
         writer = csv.writer(file)
         writer.writerow([
-            'UUID',
+            'Scanner',
             'Category',
             'Domain',
             'Status',
             'Redirect Type',
-            'Monitored vs Redirected',
-            'Formatted Redirects',
             'Monitored URL',
             'Redirected URL',
             'All Redirects',
@@ -500,24 +500,23 @@ def write_redirect_current_summary(output_path: Path, results: Iterable[PageAnal
                 if not result.overall:
                     continue
 
-                version_end = result.timeframe[0]
-                redirects, redirect_server, redirect_client = get_redirects(version_end)
+                a = result.timeframe[-1]
+                b = result.timeframe[0]
+                redirects, redirect_server, redirect_client = get_redirects(b)
                 if not redirects:
                     continue
 
-                change_type = url_change_type(version_end['url'], redirects[-1])
+                change_type = url_change_type(b['url'], redirects[-1])
                 if not change_type:
                     continue
 
                 writer.writerow([
-                    result.page['uuid'],
+                    create_view_url(result.page, a, b),
                     category,
                     domain,
                     format_status(result.overall['status_b']),
                     change_type,
-                    f"{version_end['url']}\n{redirects[-1]}",
-                    '\n'.join(redirects),
-                    version_end['url'],
+                    b['url'],
                     redirects[-1],
                     format_redirects(redirect_server, redirect_client),
                 ])
