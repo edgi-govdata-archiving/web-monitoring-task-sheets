@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 from surt import surt
+from typing import Any
+from .analyze import get_redirects, url_change_type
 
 
 EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
@@ -160,6 +162,95 @@ def format_row(page, timeframe, analysis, error, index, name, timestamp, overall
         ])
 
     return row
+
+
+def write_redirect_change_summary(output_path: Path, results: list[tuple[str, str, Any]]):
+    with output_path.open('w') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            'Scanner',
+            'Category',
+            'Domain',
+            'Status',
+            'Redirect Type',
+            'Monitored URL',
+            'Redirect Old',
+            'Redirect New',
+            'All Redirects Old',
+            'All Redirects New',
+        ])
+        for category, domain, result in results:
+            analysis = result.overall and result.overall['redirect']
+            if not analysis or not analysis['change_type']:
+                continue
+
+            change_type = analysis['change_type']
+            a = result.timeframe[-1]
+            b = result.timeframe[0]
+            a_all = [
+                url
+                for url in [*analysis['a_server'], analysis['a_client']]
+                if url
+            ]
+            b_all = [
+                url
+                for url in [*analysis['b_server'], analysis['b_client']]
+                if url
+            ]
+            a_url = a_all[-1] if len(a_all) else a['url']
+            b_url = b_all[-1] if len(b_all) else b['url']
+
+            writer.writerow([
+                create_view_url(result.page, a, b),
+                category,
+                domain,
+                format_status(result.overall['status_b']),
+                change_type,
+                b['url'],
+                a_url,
+                b_url,
+                format_redirects(analysis['a_server'], analysis['a_client']),
+                format_redirects(analysis['b_server'], analysis['b_client']),
+            ])
+
+
+def write_redirect_current_summary(output_path: Path, results: list[tuple[str, str, Any]]):
+    with output_path.open('w') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            'Scanner',
+            'Category',
+            'Domain',
+            'Status',
+            'Redirect Type',
+            'Monitored URL',
+            'Redirected URL',
+            'All Redirects',
+        ])
+        for category, domain, result in results:
+            if not result.overall:
+                continue
+
+            a = result.timeframe[-1]
+            b = result.timeframe[0]
+            redirects, redirect_server, redirect_client = get_redirects(b)
+            if not redirects:
+                continue
+
+            change_type = url_change_type(b['url'], redirects[-1])
+            if not change_type:
+                continue
+
+            writer.writerow([
+                create_view_url(result.page, a, b),
+                category,
+                domain,
+                format_status(result.overall['status_b']),
+                change_type,
+                b['url'],
+                redirects[-1],
+                format_redirects(redirect_server, redirect_client),
+            ])
 
 
 def clean_string(text):

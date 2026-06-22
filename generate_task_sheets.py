@@ -1,5 +1,9 @@
 from analyst_sheets import analyze
-from analyst_sheets.sheets import write_csv
+from analyst_sheets.sheets import (
+    write_csv,
+    write_redirect_change_summary,
+    write_redirect_current_summary,
+)
 from analyst_sheets.tools import (
     get_thread_db_client,
     tap
@@ -17,7 +21,6 @@ import logging
 import multiprocessing
 import multiprocessing.pool
 from pathlib import Path
-import re
 import signal
 import sys
 from typing import Iterable
@@ -420,106 +423,16 @@ def write_sheets(output_path: Path, results: Iterable[PageAnalysisResult], deep:
         write_csv(output_path, sheet_name, sorted_results, deep)
 
 
-def write_redirect_change_summary(output_path: Path, results: Iterable[PageAnalysisResult]) -> None:
-    # TODO: This is a bit quick-n-dirty; should probably move to sheets.py.
-    import csv
-    from analyst_sheets.sheets import create_view_url, format_redirects, format_status
-    with (output_path / '_redirects-changed.csv').open('w') as file:
-        writer = csv.writer(file)
-        writer.writerow([
-            'Scanner',
-            'Category',
-            'Domain',
-            'Status',
-            'Redirect Type',
-            'Monitored URL',
-            'Redirect Old',
-            'Redirect New',
-            'All Redirects Old',
-            'All Redirects New',
-        ])
-        sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
-        for sheet_name, sheet_results in sheet_groups.items():
-            category, _, domain = sheet_name.rpartition('--')
-            for result in sorted(sheet_results, key=lambda r: r.page['url']):
-                analysis = result.overall and result.overall['redirect']
-                if not analysis or not analysis['change_type']:
-                    continue
+def write_redirect_sheets(output_path: Path, results: Iterable[PageAnalysisResult]):
+    sorted_results = []
+    result_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
+    for group in sorted(result_groups.keys()):
+        category, _, domain = group.rpartition('--')
+        for item in sorted(result_groups[group], key=lambda r: r.page['url']):
+            sorted_results.append((category, domain, item))
 
-                change_type = analysis['change_type']
-                a = result.timeframe[-1]
-                b = result.timeframe[0]
-                a_all = [
-                    url
-                    for url in [*analysis['a_server'], analysis['a_client']]
-                    if url
-                ]
-                b_all = [
-                    url
-                    for url in [*analysis['b_server'], analysis['b_client']]
-                    if url
-                ]
-                a_url = a_all[-1] if len(a_all) else a['url']
-                b_url = b_all[-1] if len(b_all) else b['url']
-
-                writer.writerow([
-                    create_view_url(result.page, a, b),
-                    category,
-                    domain,
-                    format_status(result.overall['status_b']),
-                    change_type,
-                    b['url'],
-                    a_url,
-                    b_url,
-                    format_redirects(analysis['a_server'], analysis['a_client']),
-                    format_redirects(analysis['b_server'], analysis['b_client']),
-                ])
-
-
-def write_redirect_current_summary(output_path: Path, results: Iterable[PageAnalysisResult]) -> None:
-    # TODO: This is a bit quick-n-dirty; should probably move to sheets.py.
-    import csv
-    from analyst_sheets.analyze import get_redirects, url_change_type
-    from analyst_sheets.sheets import create_view_url, format_redirects, format_status
-    with (output_path / '_redirects-current.csv').open('w') as file:
-        writer = csv.writer(file)
-        writer.writerow([
-            'Scanner',
-            'Category',
-            'Domain',
-            'Status',
-            'Redirect Type',
-            'Monitored URL',
-            'Redirected URL',
-            'All Redirects',
-        ])
-        sheet_groups = group_by_tags(results, ['category:', 'news', '2l-domain:'])
-        for sheet_name, sheet_results in sheet_groups.items():
-            category, _, domain = sheet_name.rpartition('--')
-            for result in sorted(sheet_results, key=lambda r: r.page['url']):
-                if not result.overall:
-                    continue
-
-                a = result.timeframe[-1]
-                b = result.timeframe[0]
-                redirects, redirect_server, redirect_client = get_redirects(b)
-                if not redirects:
-                    continue
-
-                change_type = url_change_type(b['url'], redirects[-1])
-                if not change_type:
-                    continue
-
-                writer.writerow([
-                    create_view_url(result.page, a, b),
-                    category,
-                    domain,
-                    format_status(result.overall['status_b']),
-                    change_type,
-                    b['url'],
-                    redirects[-1],
-                    format_redirects(redirect_server, redirect_client),
-                ])
+    write_redirect_change_summary(output_path / '_redirects-changed.csv', sorted_results)
+    write_redirect_current_summary(output_path / '_redirects-current.csv', sorted_results)
 
 
 def main(pattern=None, tags=None, after=None, before=None, output_path=None, threshold=0, deep=False, verbose=False, use_readability=True):
@@ -584,8 +497,7 @@ def main(pattern=None, tags=None, after=None, before=None, output_path=None, thr
         ]
         if output_path:
             write_sheets(output_path, filtered, deep)
-            write_redirect_change_summary(output_path, results)
-            write_redirect_current_summary(output_path, results)
+            write_redirect_sheets(output_path, results)
         else:
             for result in filtered:
                 pretty_print_analysis(result, output=tqdm)
