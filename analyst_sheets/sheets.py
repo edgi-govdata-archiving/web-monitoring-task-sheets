@@ -122,28 +122,40 @@ def format_row(page, timeframe, analysis, error, index, name, timestamp, overall
 
     if analysis:
         row.update({
-            'Diff Length': analysis['source']['diff_length'],
-            'Diff Hash': format_hash(analysis['source']['diff_hash']),
-            'Text Diff Length': analysis['text']['diff_length'],
-            'Text Diff Hash': format_hash(analysis['text']['diff_hash']),
             'Priority': format(analysis['priority'], '.3f'),
             'Home page?': analysis['root_page'],
             'Changed status?': analysis['status_changed'],
             'Effective Status': format_status(analysis['status_b']),
             'Status': format_status(version_end['status']),
-            'Readable?': analysis['text']['readable'],
-            'Key Terms': ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
-            '% Changed Text': format(analysis['text']['percent_changed'], '.3f'),
-            'Longest Text Change': analysis['text']['diff_max_length'],
-            'Links diff hash': format_hash(analysis['links']['diff_hash']),
-            'Links changes': analysis['links']['diff_length'],
-            '% Changed Links': format(analysis['links']['diff_ratio'], '.3f'),
-            'Removed link to self': analysis['links']['removed_self_link'],
             'Client Redirect?': analysis['redirect']['is_client_redirect'] or '',
             'Redirects Changed?': analysis['redirect']['change_type'] or '',
             'Prior Redirects': format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
             'Current Redirects': format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
         })
+
+        if analysis.get('source'):
+            row.update({
+                'Diff Length': analysis['source']['diff_length'],
+                'Diff Hash': format_hash(analysis['source']['diff_hash']),
+            })
+
+        if analysis.get('text'):
+            row.update({
+                'Text Diff Length': analysis['text']['diff_length'],
+                'Text Diff Hash': format_hash(analysis['text']['diff_hash']),
+                'Readable?': analysis['text']['readable'],
+                'Key Terms': ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
+                '% Changed Text': format(analysis['text']['percent_changed'], '.3f'),
+                'Longest Text Change': analysis['text']['diff_max_length'],
+            })
+
+        if analysis.get('links'):
+            row.update({
+                'Links diff hash': format_hash(analysis['links']['diff_hash']),
+                'Links changes': analysis['links']['diff_length'],
+                '% Changed Links': format(analysis['links']['diff_ratio'], '.3f'),
+                'Removed link to self': analysis['links']['removed_self_link'],
+            })
     else:
         row.update({
             'Priority': '?',
