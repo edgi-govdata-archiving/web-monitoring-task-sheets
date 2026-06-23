@@ -254,19 +254,6 @@ def write_redirect_current_summary(output_path: Path, results: list[tuple[str, s
             ])
 
 
-def dig(container, *keys, default: Any = None) -> Any:
-    value = container
-    for key in keys:
-        try:
-            value = value[key]
-        except LookupError:
-            value = None
-        if value is None:
-            return default
-
-    return value
-
-
 def clean_string(text):
     if text:
         return re.sub(r'[\n\s]+', ' ', text.strip())
