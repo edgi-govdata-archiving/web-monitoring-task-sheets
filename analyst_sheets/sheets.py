@@ -67,8 +67,8 @@ def write_csv(parent_directory: Path, name: str, results, deep):
     timestamp = format_datetime(datetime.now(timezone.utc))
 
     with filepath.open('w') as file:
-        writer = csv.writer(file)
-        writer.writerow(HEADERS)
+        writer = csv.DictWriter(file, HEADERS)
+        writer.writeheader()
 
         for index, result in enumerate(results):
             row_number = index + 1
@@ -99,67 +99,56 @@ def write_csv(parent_directory: Path, name: str, results, deep):
                     ))
 
                 # Blank row to help separate page groups in deep analysis.
-                writer.writerow(['---' for _ in HEADERS])
+                writer.writerow({key: '---' for key in HEADERS})
 
 
 def format_row(page, timeframe, analysis, error, index, name, timestamp, overall: bool):
     version_start = timeframe[-1]
     version_end = timeframe[0]
 
-    row = [
-        index,
-        'OVERALL' if overall else version_end['uuid'],
-        timestamp,
-        ', '.join(m['name'] for m in page['maintainers']),
-        name,
-        clean_string(page['title']),
-        page['url'],
-        '',
-        create_view_url(page, version_start, version_end),
-        create_ia_changes_url(page, version_start, version_end),
-        format_datetime(version_end['capture_time']),
-        format_datetime(version_start['capture_time']),
-    ]
+    row = {
+        'Index': index,
+        'Version': 'OVERALL' if overall else version_end['uuid'],
+        'Output Date/Time': timestamp,
+        'Maintainers': ', '.join(m['name'] for m in page['maintainers']),
+        'Site Name': name,
+        'Page Title': clean_string(page['title']),
+        'URL': page['url'],
+        'Scanner Comparison': create_view_url(page, version_start, version_end),
+        'IA Comparison': create_ia_changes_url(page, version_start, version_end),
+        'Date Found - Latest': format_datetime(version_end['capture_time']),
+        'Date Found - Base': format_datetime(version_start['capture_time']),
+    }
 
     if analysis:
-        row.extend([
-            analysis['source']['diff_length'],
-            format_hash(analysis['source']['diff_hash']),
-            analysis['text']['diff_length'],
-            format_hash(analysis['text']['diff_hash']),
-            # Placeholder column: version count is no longer relevant.
-            '',
-            format(analysis['priority'], '.3f'),
-            # Error column is empty in this case. :)
-            '',
-
-            analysis['root_page'],
-            analysis['status_changed'],
-            format_status(analysis['status_b']),
-            format_status(version_end['status']),
-            analysis['text']['readable'],
-            ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
-            format(analysis['text']['percent_changed'], '.3f'),
-            analysis['text']['diff_max_length'],
-            format_hash(analysis['links']['diff_hash']),
-            analysis['links']['diff_length'],
-            format(analysis['links']['diff_ratio'], '.3f'),
-            analysis['links']['removed_self_link'],
-            analysis['redirect']['is_client_redirect'] or '',
-            analysis['redirect']['change_type'] or '',
-            format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
-            format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
-        ])
+        row.update({
+            'Diff Length': analysis['source']['diff_length'],
+            'Diff Hash': format_hash(analysis['source']['diff_hash']),
+            'Text Diff Length': analysis['text']['diff_length'],
+            'Text Diff Hash': format_hash(analysis['text']['diff_hash']),
+            'Priority': format(analysis['priority'], '.3f'),
+            'Home page?': analysis['root_page'],
+            'Changed status?': analysis['status_changed'],
+            'Effective Status': format_status(analysis['status_b']),
+            'Status': format_status(version_end['status']),
+            'Readable?': analysis['text']['readable'],
+            'Key Terms': ', '.join((f'{term}: {count}' for term, count in analysis['text']['key_terms'].items())),
+            '% Changed Text': format(analysis['text']['percent_changed'], '.3f'),
+            'Longest Text Change': analysis['text']['diff_max_length'],
+            'Links diff hash': format_hash(analysis['links']['diff_hash']),
+            'Links changes': analysis['links']['diff_length'],
+            '% Changed Links': format(analysis['links']['diff_ratio'], '.3f'),
+            'Removed link to self': analysis['links']['removed_self_link'],
+            'Client Redirect?': analysis['redirect']['is_client_redirect'] or '',
+            'Redirects Changed?': analysis['redirect']['change_type'] or '',
+            'Prior Redirects': format_redirects(analysis['redirect']['a_server'], analysis['redirect']['a_client']),
+            'Current Redirects': format_redirects(analysis['redirect']['b_server'], analysis['redirect']['b_client']),
+        })
     else:
-        row.extend([
-            None,
-            None,
-            None,
-            None,
-            '',
-            '?',
-            str(error)
-        ])
+        row.update({
+            'Priority': '?',
+            'Error': str(error),
+        })
 
     return row
 
@@ -251,6 +240,19 @@ def write_redirect_current_summary(output_path: Path, results: list[tuple[str, s
                 redirects[-1],
                 format_redirects(redirect_server, redirect_client),
             ])
+
+
+def dig(container, *keys, default: Any = None) -> Any:
+    value = container
+    for key in keys:
+        try:
+            value = value[key]
+        except LookupError:
+            value = None
+        if value is None:
+            return default
+
+    return value
 
 
 def clean_string(text):
