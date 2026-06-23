@@ -83,6 +83,11 @@ DISALLOWED_EXTENSIONS = frozenset((
     '.zip'
 ))
 
+METADATA_ONLY_URLS = (
+    re.compile(r'://(www.)?youtube.com/'),
+    re.compile(r'://github.com/'),
+)
+
 STANDARD_STATUS_MESSAGES = set(f'{s.value} {s.phrase.lower()}'
                                for s in HTTPStatus)
 
@@ -105,6 +110,11 @@ def is_analyzable_media(version):
         return is_allowed_extension(version['url'])
     else:
         return False
+
+
+def is_content_analyzable(url: str) -> bool:
+    url = url.lower()
+    return not any(pattern.search(url) for pattern in METADATA_ONLY_URLS)
 
 
 class AnalyzableError(ValueError):
@@ -618,40 +628,45 @@ def analyze_page(page, after, before, use_readability=True):
     versions_count = len(page['versions'])
     root_page = is_home_page(page)
 
-    a = page['versions'][len(page['versions']) - 1]
+    a = page['versions'][-1]
     b = page['versions'][0]
-    with ActivityMonitor(f'load raw content for {page["uuid"]}'):
-        # Preload raw HTML bodies.
-        parallel((get_body_text, a), (get_body_text, b))
-        # Pre-normalize (normalize modifies global state; is not thread-safe).
-        get_body_normalized(a)
-        get_body_normalized(b)
 
-    link_analysis = analyze_links(a, b)
-    if link_analysis['diff_length'] > 0:
-        baseline = max(baseline, 0.1)
-        priority += 0.3 * priority_factor(link_analysis['diff_ratio'])
-    # This most likely indicates a page was removed from navigation! Big deal.
-    if link_analysis['removed_self_link']:
-        priority += 0.75
+    link_analysis = None
+    text_analysis = None
+    source_analysis = None
+    if is_content_analyzable(page['url']):
+        with ActivityMonitor(f'load raw content for {page["uuid"]}'):
+            # Preload raw HTML bodies.
+            parallel((get_body_text, a), (get_body_text, b))
+            # Pre-normalize (normalize modifies global state; is not thread-safe).
+            get_body_normalized(a)
+            get_body_normalized(b)
 
-    text_analysis = analyze_text(page, a, b, use_readability)
-    if text_analysis['key_terms_changed']:
-        priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
-    if text_analysis['diff_count'] > 0:
-        priority += 0.65 * priority_factor(text_analysis['percent_changed'])
-    # Increase the score if a single change is > 100 characters. The added
-    # score increases up until 600 characters.
-    if text_analysis['diff_max_length'] > 100:
-        long_change_size = min(text_analysis['diff_max_length'], 600) - 100
-        priority += 0.35 * long_change_size / 500
+        link_analysis = analyze_links(a, b)
+        if link_analysis['diff_length'] > 0:
+            baseline = max(baseline, 0.1)
+            priority += 0.3 * priority_factor(link_analysis['diff_ratio'])
+        # This most likely indicates a page was removed from navigation! Big deal.
+        if link_analysis['removed_self_link']:
+            priority += 0.75
 
-    # Ensure a minimum priority of both text and links changed.
-    # This should probably stay less than 0.15.
-    if text_analysis['diff_count'] > 0 and link_analysis['diff_length'] > 0:
-        baseline = max(baseline, 0.125)
+        text_analysis = analyze_text(page, a, b, use_readability)
+        if text_analysis['key_terms_changed']:
+            priority += min(0.4, 0.05 * text_analysis['key_terms_change_count'])
+        if text_analysis['diff_count'] > 0:
+            priority += 0.65 * priority_factor(text_analysis['percent_changed'])
+        # Increase the score if a single change is > 100 characters. The added
+        # score increases up until 600 characters.
+        if text_analysis['diff_max_length'] > 100:
+            long_change_size = min(text_analysis['diff_max_length'], 600) - 100
+            priority += 0.35 * long_change_size / 500
 
-    source_analysis = analyze_source(a, b)
+        # Ensure a minimum priority of both text and links changed.
+        # This should probably stay less than 0.15.
+        if text_analysis['diff_count'] > 0 and link_analysis['diff_length'] > 0:
+            baseline = max(baseline, 0.125)
+
+        source_analysis = analyze_source(a, b)
 
     status_changed = page_status_changed(page, a, b)
     if status_changed:
