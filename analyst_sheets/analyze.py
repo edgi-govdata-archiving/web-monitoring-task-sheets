@@ -412,6 +412,12 @@ def get_version_status(version: dict) -> int:
     if version['headers'] and 'level=error' in version['headers'].get('apex-debug-id', '').lower():
         return 500
 
+    # ASP.net servers that are configured to *redirect* to an error page
+    # include the `?aspxerrorpath=<path>` query param. Like the above, it's
+    # ambiguous about the actual type of error, so we check it last.
+    if redirects and re.search(r'\?(.+&)?aspxerrorpath=', redirects[-1], re.I):
+        return 500
+
     return status
 
 

@@ -69,6 +69,15 @@ class TestGetVersionStatus:
             title='USGS Water Data for the Nation',
         ))
 
+    def test_redirects_with_aspxerrorpath_query_param(self):
+        assert 500 == get_version_status(dummy_version(
+            urls=[
+                (301, 'https://aedt.faa.gov/3g_information.aspx'),
+                (200, 'https://aedt.faa.gov/ErrorPage.aspx?aspxerrorpath=%2F3g_information.aspx'),
+            ],
+            title='FAA: AEDT Support Website',
+        ))
+
     def test_special_epa_signpost(self):
         # https://api.monitoring.envirodatagov.org/api/v0/versions/00002893-4493-4db4-8f9d-6f4644bb99c5
         assert 404 == get_version_status(dummy_version(
