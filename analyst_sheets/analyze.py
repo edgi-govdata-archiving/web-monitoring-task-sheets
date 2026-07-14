@@ -609,6 +609,11 @@ def priority_factor(ratio):
 def get_body_text(version: dict) -> str:
     if '_body_text' not in version:
         response = load_url(version['body_url'])
+        # TODO: we should be using the same text encoding detection + decoding
+        # logic we use elsewhere, both for consistency and to work around some
+        # known shortcomings of what’s requests' built-in logic does.
+        # But don't bother until we have a better handle on cchardet issues.
+        # See: https://github.com/edgi-govdata-archiving/web-monitoring/issues/204
         version['_body_text'] = response.text
 
     return version['_body_text']
