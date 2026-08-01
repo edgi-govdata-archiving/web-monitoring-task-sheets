@@ -14,7 +14,7 @@
     "@mozilla/readability": "^0.6.0",
     "body-parser": "^2.3.0",
     "express": "^5.2.1",
-    "jsdom": "^29.1.1"
+    "jsdom": "^30.0.0"
   },
   "devDependencies": {
     "chai": "^6.2.2",
