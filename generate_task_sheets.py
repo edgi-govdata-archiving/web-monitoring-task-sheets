@@ -321,7 +321,8 @@ def group_by_hash(analyses: Iterable[PageAnalysisResult]):
     groups = {}
     for result in analyses:
         if result.overall:
-            key = result.overall['text']['diff_hash']
+            text = result.overall['text']
+            key = text['diff_hash'] if text else '__METADATA__'
         else:
             key = '__ERROR__'
         if key not in groups:
