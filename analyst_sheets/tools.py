@@ -1,6 +1,7 @@
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from nltk.corpus import stopwords
+from os import getenv
 import re
 import requests
 from retry import retry
@@ -246,9 +247,12 @@ def get_thread_http_client():
     return thread_clients.http_client
 
 
+WEB_MONITORING_DB_URL = getenv('WEB_MONITORING_DB_URL') or db.DEFAULT_URL
+
+
 @retry(tries=3, delay=1)
 def load_url(url, raise_status=True, timeout=5, method='GET', **request_args):
-    if url.startswith('https://api.monitoring.envirodatagov.org'):
+    if url.startswith(WEB_MONITORING_DB_URL):
         response = get_thread_db_client().request(method, url, **request_args)
     else:
         response = get_thread_http_client().request(method, url, timeout=timeout, **request_args)
