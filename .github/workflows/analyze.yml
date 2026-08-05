@@ -104,7 +104,7 @@ jobs:
           WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
           TAG_OPTIONS: ${{ inputs.tag && format('--tag ''{0}''', inputs.tag) || '' }}
-          DEEP_OPTIONS: ${{ env.DEEP && '--deep' || '' }}
+          DEEP_OPTIONS: ${{ env.DEEP == 'true' && '--deep' || '' }}
         run: |
           echo "Tag options: '${TAG_OPTIONS}'"
           echo "Readability options: '${READABILITY_OPTIONS}'"

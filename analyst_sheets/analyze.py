@@ -608,7 +608,7 @@ def priority_factor(ratio):
 
 def get_body_text(version: dict) -> str:
     if '_body_text' not in version:
-        response = load_url(version['body_url'])
+        response = load_url(version['body_url'], headers={'Accept': '*/*'})
         # TODO: we should be using the same text encoding detection + decoding
         # logic we use elsewhere, both for consistency and to work around some
         # known shortcomings of what’s requests' built-in logic does.
@@ -679,6 +679,18 @@ def analyze_page(page, after, before, use_readability=True):
 
         source_analysis = analyze_source(a, b)
 
+        # Demote root pages, since they usually are just listings of other
+        # things. We expect a lot of churn.
+        if root_page:
+            priority *= 0.25
+
+        # TODO: Demote topic pages?
+        # 1 (or 2?) level deep and not readable
+
+        # TODO: Demote news pages...?
+        # if is_news_page(page['url']):
+        #     priority *= 0.25
+
     status_changed = page_status_changed(page, a, b)
     if status_changed:
         priority += 1
@@ -694,17 +706,6 @@ def analyze_page(page, after, before, use_readability=True):
 
     # Ensure priority at least matches baseline.
     priority = max(priority, baseline)
-
-    # Demote root pages, since they usually are just listings of other things.
-    if root_page:
-        priority *= 0.25
-
-    # TODO: Demote topic pages?
-    # 1 (or 2?) level deep and not readable
-
-    # TODO: Demote news pages...?
-    # if is_news_page(page['url']):
-    #     priority *= 0.25
 
     return dict(
         priority=max(min(priority, 1), 0),
