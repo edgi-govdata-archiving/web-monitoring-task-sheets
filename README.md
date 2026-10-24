@@ -76,7 +76,7 @@ A scheduled GitHub Actions workflow in this repo runs the script on regular basi
 
     ```sh
     > cd xyz
-    > pyenv virtualenv 3.10.16 wm-task-sheets
+    > pyenv virtualenv 3.15.1 wm-task-sheets
     > pyenv activate wm-task-sheets
     > pip install --upgrade pip  # Make sure pip is up-to-date
     > pip install -r requirements.txt
