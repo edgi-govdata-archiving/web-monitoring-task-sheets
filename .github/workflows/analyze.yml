@@ -161,10 +161,20 @@ jobs:
           rclone copy --config rclone.conf out "gdrive-task-sheets:${FOLDER_NAME}"
           echo "folder_name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
 
+          # Find the URL of the newly created folder so we can link to it.
+          FOLDER_URL="$(
+            rclone backend query \
+              gdrive-task-sheets: \
+              "name = '${FOLDER_NAME}' and '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' in parents" \
+              --config rclone.conf \
+              | jq --raw-output '.[0].webViewLink'
+          )"
+          echo "folder_url=${FOLDER_URL}" >> "$GITHUB_OUTPUT"
+
       - name: Notify Slack
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
           webhook: ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
           webhook-type: incoming-webhook
           payload: |
-            text: "<!here> This week’s sheets are now in the `${{ steps.upload.outputs.folder_name }}` folder in Google Drive."
+            text: "<!here> This week’s sheets are now in the `${{ steps.upload.outputs.folder_name }}` folder in Google Drive: ${{ steps.upload.outputs.folder_url }}"
