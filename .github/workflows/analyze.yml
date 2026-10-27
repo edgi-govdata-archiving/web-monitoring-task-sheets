@@ -174,7 +174,7 @@ jobs:
       - name: Notify Slack
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
-          webhook: ${{ secrets.SLACK_NOTIFICATION_WEBHOOK }}
+          webhook: ${{ secrets.SLACK_NOTIFICATION_TEST_WEBHOOK }}
           webhook-type: incoming-webhook
           payload: |
             text: "<!here> This week’s sheets are now in the `${{ steps.upload.outputs.folder_name }}` folder in Google Drive: ${{ steps.upload.outputs.folder_url }}"
