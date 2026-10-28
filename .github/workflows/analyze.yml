@@ -162,13 +162,12 @@ jobs:
           echo "folder_name=${FOLDER_NAME}" >> "$GITHUB_OUTPUT"
 
           # Find the URL of the newly created folder so we can link to it.
-          FOLDER_URL="$(
-            rclone backend query \
-              gdrive-task-sheets: \
-              "name = '${FOLDER_NAME}' and '${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}' in parents" \
+          FOLDER_ID="$(
+            rclone lsjson gdrive-task-sheets: \
               --config rclone.conf \
-              | jq --raw-output '.[0].webViewLink'
+              | jq --raw-output ".[] | select(.Name == \"${FOLDER_NAME}\") | .ID"
           )"
+          FOLDER_URL="https://drive.google.com/drive/folders/${FOLDER_ID}"
           echo "folder_url=${FOLDER_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Notify Slack
