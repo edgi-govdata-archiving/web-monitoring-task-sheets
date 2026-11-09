@@ -101,7 +101,7 @@ jobs:
 
       - name: Analyze!
         env:
-          WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
+          WEB_MONITORING_DB_CLIENT_TOKEN: '${{ secrets.WEB_MONITORING_DB_CLIENT_TOKEN }}'
           READABILITY_OPTIONS: ${{ env.USE_READABILITY == 'false' && '--skip-readability' || '' }}
           TAG_OPTIONS: ${{ inputs.tag && format('--tag ''{0}''', inputs.tag) || '' }}
           DEEP_OPTIONS: ${{ env.DEEP == 'true' && '--deep' || '' }}

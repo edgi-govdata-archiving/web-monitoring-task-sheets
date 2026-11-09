@@ -50,7 +50,7 @@ jobs:
       - name: Build status CSV
         id: build-csv
         env:
-          WEB_MONITORING_DB_URL: '${{ secrets.WEB_MONITORING_DB_URL }}'
+          WEB_MONITORING_DB_CLIENT_TOKEN: '${{ secrets.WEB_MONITORING_DB_CLIENT_TOKEN }}'
         run: |
           mkdir out
           timestamp="$(date +'%Y-%m-%d')"
