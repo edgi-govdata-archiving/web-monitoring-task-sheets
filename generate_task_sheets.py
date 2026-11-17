@@ -20,6 +20,7 @@ import json
 import logging
 import multiprocessing
 import multiprocessing.pool
+import os
 from pathlib import Path
 import signal
 import sys
@@ -541,6 +542,15 @@ if __name__ == '__main__':
         logger.setLevel(logging.DEBUG)
 
     logger.debug('Hello debugging at top')
+
+    # We run the analysis in a process pool, so make sure those processes pick
+    # up a smaller rate limit that adds up to a real limit. (Some requests also
+    # happen on the main thread, so we have `pool size + 1` processes.)
+    api_rate = os.environ.get('WEB_MONITORING_MAX_REQUESTS_PER_SECOND')
+    if not api_rate:
+        api_rate = f'{19 / ((os.process_cpu_count() or 1) + 1):.2f}'
+        os.environ['WEB_MONITORING_MAX_REQUESTS_PER_SECOND'] = api_rate
+    logger.info(f'Setting API max requests/second/process to {api_rate}')
 
     # Validate before vs. after
     if options.before and options.after and options.before <= options.after:
